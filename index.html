@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jump Jump Stupid Bird</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>Jump Jump Stupid Bird</h1>
+    <div id="game-container">
+        <canvas id="game-canvas" width="480" height="640"></canvas>
+        <div id="ui-container">
+            <div id="score-container">Time: <span id="score">0</span>s</div>
+            <div id="debug-container">
+                <h3>Debug Options</h3>
+                <button id="decrease-jump">Jump --</button>
+                <span id="jump-strength">9</span>
+                <button id="increase-jump">Jump ++</button>
+                <br>
+                <button id="decrease-gravity">Gravity --</button>
+                <span id="gravity-strength">0.5</span>
+                <button id="increase-gravity">Gravity ++</button>
+                <br>
+                <button id="toggle-debug">Toggle Hitbox</button>
+            </div>
+        </div>
+        <div id="game-over-container" class="hidden">
+            <h2>Game Over</h2>
+            <p>Your Time: <span id="final-score">0</span>s</p>
+            <h3>Best Records (Top 5)</h3>
+            <ol id="high-scores"></ol>
+            <button id="new-game-button">New Game</button>
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>

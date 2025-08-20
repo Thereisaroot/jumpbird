@@ -1,0 +1,29 @@
+{
+  "name": "jump-jump-stupid-bird",
+  "version": "1.0.0",
+  "description": "A Flappy Bird style game.",
+  "main": "game.js",
+  "scripts": {
+    "start": "node server.js",
+    "build": "cpx \"{index.html,style.css,game.js,*.png}\" build",
+    "postbuild": "echo jumpbird.qwpo.cc > build/CNAME",
+    "predeploy": "npm run build && npm run postbuild",
+    "deploy": "gh-pages -d build",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "remote":"git remote add origin https://github.com/Thereisaroot/jumpbird.git"
+  },
+  "keywords": [
+    "flappy-bird",
+    "game",
+    "html5"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "cpx": "^1.5.0",
+    "gh-pages": "^6.3.0"
+  }
+}
