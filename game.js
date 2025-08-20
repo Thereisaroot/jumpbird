@@ -9,8 +9,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const highScoresEl = document.getElementById('high-scores');
     const newGameButton = document.getElementById('new-game-button');
     const uiContainer = document.getElementById('ui-container');
+    const gameContainer = document.getElementById('game-container');
 
     // Debug UI
+    const debugContainer = document.getElementById('debug-container');
     const jumpStrengthEl = document.getElementById('jump-strength');
     const gravityStrengthEl = document.getElementById('gravity-strength');
     const increaseJumpBtn = document.getElementById('increase-jump');
@@ -62,13 +64,13 @@ document.addEventListener('DOMContentLoaded', () => {
         gameState = 'playing';
         timeToNextObstacle = 0;
         lastTime = performance.now();
-        gameOverContainer.classList.add('hidden');
+        gameOverContainer.classList.remove('visible');
         uiContainer.style.display = 'block';
     }
 
     function gameLoop(currentTime) {
         if (!lastTime) lastTime = currentTime;
-        const deltaTime = (currentTime - lastTime) / (1000 / 60); // Normalize to 60 FPS baseline
+        const deltaTime = (currentTime - lastTime) / (1000 / 60);
         lastTime = currentTime;
 
         if (gameState === 'playing') {
@@ -76,18 +78,17 @@ document.addEventListener('DOMContentLoaded', () => {
             draw();
         } else if (gameState === 'title') {
             drawTitleScreen();
-        } 
+        }
         requestAnimationFrame(gameLoop);
     }
 
     function update(deltaTime) {
-        // Background scroll
+        const overlap = 3;
         background.x1 -= background.speed * deltaTime;
         background.x2 -= background.speed * deltaTime;
-        if (background.x1 <= -canvas.width) background.x1 = canvas.width;
-        if (background.x2 <= -canvas.width) background.x2 = canvas.width;
+        if (background.x1 <= -canvas.width) background.x1 = background.x2 + canvas.width - overlap;
+        if (background.x2 <= -canvas.width) background.x2 = background.x1 + canvas.width - overlap;
 
-        // Bird physics
         bird.velocityY += gravity * deltaTime;
         bird.y += bird.velocityY * deltaTime;
 
@@ -99,7 +100,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         score = ((Date.now() - startTime) / 1000).toFixed(2);
 
-        // Obstacle management (time-based)
         timeToNextObstacle -= deltaTime;
         if (timeToNextObstacle <= 0) {
             const obstacleWidth = 80 + Math.random() * 50;
@@ -107,7 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const topPipeHeight = Math.random() * (canvas.height - gapHeight - 150) + 75;
             obstacles.push({ x: canvas.width, y: 0, width: obstacleWidth, height: topPipeHeight, type: 'longPlumbing' });
             obstacles.push({ x: canvas.width, y: topPipeHeight + gapHeight, width: obstacleWidth, height: canvas.height - topPipeHeight - gapHeight, type: 'longPlumbing' });
-            timeToNextObstacle = 120; // Reset timer (120 frames at 60fps = 2 seconds)
+            timeToNextObstacle = 120;
         }
 
         obstacles.forEach(obs => { obs.x -= obstacleSpeed * deltaTime; });
@@ -167,9 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function startGame() {
-        if (gameState === 'title') {
-            resetGame();
-        }
+        if (gameState === 'title') resetGame();
     }
 
     function jump() {
@@ -181,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
         gameState = 'over';
         updateHighScores(parseFloat(score));
         finalScoreEl.textContent = score;
-        gameOverContainer.classList.remove('hidden');
+        gameOverContainer.classList.add('visible');
         uiContainer.style.display = 'none';
     }
 
@@ -204,8 +202,38 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Event Listeners
+    // --- Secret Debug Activation ---
+    let secretClickCount = 0;
+    let secretClickTimer = null;
+    let keySequence = '';
+
+    function showDebugMenu() {
+        if (debugContainer.style.display !== 'block') {
+            debugContainer.style.display = 'block';
+            console.log('Debug menu activated.');
+        }
+    }
+
+    document.body.addEventListener('click', (e) => {
+        if (!gameContainer.contains(e.target)) {
+            secretClickCount++;
+            clearTimeout(secretClickTimer);
+            secretClickTimer = setTimeout(() => { secretClickCount = 0; }, 1500);
+            if (secretClickCount >= 5) {
+                showDebugMenu();
+                secretClickCount = 0;
+            }
+        }
+    });
+
+    // --- Event Listeners ---
     window.addEventListener('keydown', (e) => {
+        keySequence += e.key;
+        keySequence = keySequence.slice(-2);
+        if (keySequence === 'dd') {
+            showDebugMenu();
+        }
+
         if (e.code === 'Space') {
             if (gameState === 'title') startGame();
             else if (gameState === 'playing') jump();
@@ -218,7 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     newGameButton.addEventListener('click', () => {
-        gameOverContainer.classList.add('hidden');
+        gameOverContainer.classList.remove('visible');
         resetGame();
     });
 
@@ -232,7 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function init() {
         uiContainer.style.display = 'none';
         displayHighScores();
-        requestAnimationFrame(gameLoop); // Start the game loop immediately
+        requestAnimationFrame(gameLoop);
     }
 
     loadImages(init);
