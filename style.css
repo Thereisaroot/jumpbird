@@ -1,3 +1,17 @@
+@keyframes pop-in-bouncy {
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 0;
+    }
+    60% {
+        transform: translate(-50%, -50%) scale(1.1);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
 body {
     font-family: 'Arial', sans-serif;
     background-color: #f0f0f0;
@@ -18,11 +32,11 @@ h1 {
     width: 480px;
     height: 640px;
     border: 2px solid #333;
-    overflow: hidden; /* Ensures nothing spills out of the container */
+    overflow: hidden;
 }
 
 #game-canvas {
-    background-color: #87CEEB; /* Sky blue */
+    background-color: black; /* Black background during load */
     display: block;
 }
 
@@ -48,7 +62,7 @@ h1 {
     background-color: rgba(0, 0, 0, 0.5);
     padding: 10px;
     border-radius: 5px;
-    display: none; /* Hidden by default */
+    display: none;
 }
 
 #debug-container h3 {
@@ -65,9 +79,8 @@ h1 {
     position: absolute;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%);
     width: 80%;
-    background-color: rgba(255, 255, 255, 0.6); /* Made 2x more transparent */
+    background-color: rgba(255, 255, 255, 0.6);
     background-image: linear-gradient(to bottom, rgba(255,255,255,0.7), rgba(255,255,255,0.5));
     padding: 20px;
     border-radius: 15px;
@@ -76,10 +89,17 @@ h1 {
     box-shadow: 0 10px 25px rgba(0,0,0,0.5);
     color: #333;
     text-shadow: 1px 1px 2px #fff;
+    /* Animation properties */
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease-out;
 }
 
-#game-over-container.hidden {
-    display: none;
+#game-over-container.visible {
+    opacity: 1;
+    pointer-events: auto;
+    animation: pop-in-bouncy 0.6s cubic-bezier(0.68, -0.55, 0.27, 1.55) forwards;
 }
 
 #game-over-container h2 {

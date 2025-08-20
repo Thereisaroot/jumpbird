@@ -64,7 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
         gameState = 'playing';
         timeToNextObstacle = 0;
         lastTime = performance.now();
-        gameOverContainer.classList.add('hidden');
+        gameOverContainer.classList.remove('visible');
         uiContainer.style.display = 'block';
     }
 
@@ -179,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
         gameState = 'over';
         updateHighScores(parseFloat(score));
         finalScoreEl.textContent = score;
-        gameOverContainer.classList.remove('hidden');
+        gameOverContainer.classList.add('visible');
         uiContainer.style.display = 'none';
     }
 
@@ -228,14 +228,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Event Listeners ---
     window.addEventListener('keydown', (e) => {
-        // Secret key sequence
         keySequence += e.key;
         keySequence = keySequence.slice(-2);
         if (keySequence === 'dd') {
             showDebugMenu();
         }
 
-        // Game controls
         if (e.code === 'Space') {
             if (gameState === 'title') startGame();
             else if (gameState === 'playing') jump();
@@ -248,7 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     newGameButton.addEventListener('click', () => {
-        gameOverContainer.classList.add('hidden');
+        gameOverContainer.classList.remove('visible');
         resetGame();
     });
 
