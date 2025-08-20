@@ -20,11 +20,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const toggleDebugBtn = document.getElementById('toggle-debug');
 
     // Game variables
-    let bird, obstacles, background, frame, score, startTime, highScores;
-    let gravity = 0.5;
-    let jumpStrength = 9;
+    let bird, obstacles, background, score, startTime, highScores;
+    let gravity = 0.4;
+    let jumpStrength = 8;
+    let obstacleSpeed = 3;
     let gameState = 'title'; // title, playing, over
-    let debugMode = false; // Toggle for collision box visualization
+    let debugMode = false;
+    let lastTime = 0;
+    let timeToNextObstacle = 0;
 
     const imageSources = {
         bird: 'bird.png',
@@ -54,34 +57,39 @@ document.addEventListener('DOMContentLoaded', () => {
         bird = { x: 100, y: 250, width: 45, height: 45, velocityY: 0 };
         background = { x1: 0, x2: canvas.width, speed: 2 };
         obstacles = [];
-        frame = 0;
         score = 0;
         startTime = Date.now();
         gameState = 'playing';
+        timeToNextObstacle = 0;
+        lastTime = performance.now();
         gameOverContainer.classList.add('hidden');
         uiContainer.style.display = 'block';
     }
 
-    function gameLoop() {
+    function gameLoop(currentTime) {
+        if (!lastTime) lastTime = currentTime;
+        const deltaTime = (currentTime - lastTime) / (1000 / 60); // Normalize to 60 FPS baseline
+        lastTime = currentTime;
+
         if (gameState === 'playing') {
-            update();
+            update(deltaTime);
             draw();
         } else if (gameState === 'title') {
             drawTitleScreen();
-        } else if (gameState === 'over') {
-            // The game over screen is an HTML overlay, so we just stop the loop.
-        }
+        } 
         requestAnimationFrame(gameLoop);
     }
 
-    function update() {
-        background.x1 -= background.speed;
-        background.x2 -= background.speed;
+    function update(deltaTime) {
+        // Background scroll
+        background.x1 -= background.speed * deltaTime;
+        background.x2 -= background.speed * deltaTime;
         if (background.x1 <= -canvas.width) background.x1 = canvas.width;
         if (background.x2 <= -canvas.width) background.x2 = canvas.width;
 
-        bird.velocityY += gravity;
-        bird.y += bird.velocityY;
+        // Bird physics
+        bird.velocityY += gravity * deltaTime;
+        bird.y += bird.velocityY * deltaTime;
 
         const birdBox = getBirdCollisionBox();
         if (birdBox.y + birdBox.height > canvas.height || birdBox.y < 0) {
@@ -91,19 +99,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
         score = ((Date.now() - startTime) / 1000).toFixed(2);
 
-        if (frame % 120 === 0) {
+        // Obstacle management (time-based)
+        timeToNextObstacle -= deltaTime;
+        if (timeToNextObstacle <= 0) {
             const obstacleWidth = 80 + Math.random() * 50;
             const gapHeight = 220;
             const topPipeHeight = Math.random() * (canvas.height - gapHeight - 150) + 75;
             obstacles.push({ x: canvas.width, y: 0, width: obstacleWidth, height: topPipeHeight, type: 'longPlumbing' });
             obstacles.push({ x: canvas.width, y: topPipeHeight + gapHeight, width: obstacleWidth, height: canvas.height - topPipeHeight - gapHeight, type: 'longPlumbing' });
+            timeToNextObstacle = 120; // Reset timer (120 frames at 60fps = 2 seconds)
         }
 
-        obstacles.forEach(obs => { obs.x -= 3; });
+        obstacles.forEach(obs => { obs.x -= obstacleSpeed * deltaTime; });
         obstacles = obstacles.filter(obs => obs.x + obs.width > 0);
 
         checkCollisions();
-        frame++;
     }
 
     function draw() {
@@ -119,19 +129,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function drawTitleScreen() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(images.bg, 0, 0, canvas.width, canvas.height);
-        
         const titleImg = images.title;
         const imgAspectRatio = titleImg.height / titleImg.width;
-        
-        // Scale image to fit 90% of canvas width
         const targetWidth = canvas.width * 0.9;
         const targetHeight = targetWidth * imgAspectRatio;
-
         const x = (canvas.width - targetWidth) / 2;
-        const y = (canvas.height - targetHeight) / 2 - 50; // Move it up a bit
-
+        const y = (canvas.height - targetHeight) / 2 - 50;
         ctx.drawImage(titleImg, x, y, targetWidth, targetHeight);
-
         ctx.fillStyle = 'white';
         ctx.font = '24px Arial';
         ctx.textAlign = 'center';
@@ -228,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function init() {
         uiContainer.style.display = 'none';
         displayHighScores();
-        gameLoop(); // Start the game loop immediately to show the title screen
+        requestAnimationFrame(gameLoop); // Start the game loop immediately
     }
 
     loadImages(init);
