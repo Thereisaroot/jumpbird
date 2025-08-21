@@ -6,6 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const scoreEl = getEl('score');
     const opponentScoreEl = getEl('opponent-score');
     const finalScoreEl = getEl('final-score');
+    const myFinalScoreEl = getEl('my-final-score');
+    const opponentFinalScoreEl = getEl('opponent-final-score');
     const gameOverContainer = getEl('game-over-container');
     const gameOverTitle = getEl('game-over-title');
     const uiContainer = getEl('ui-container');
@@ -13,17 +15,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const peerIdInput = getEl('peer-id-input');
     const connectButton = getEl('connect-button');
     const connectionStatusEl = getEl('connection-status');
-    const userListEl = getEl('user-list');
     const newGameButton = getEl('new-game-button');
-    const startGameButton = getEl('start-game-button');
 
     // --- Game State & Constants ---
-    let localBird, remoteBird, obstacles, background, score;
-    let gameState = 'loading'; // loading, single_player, multiplayer_lobby, multiplayer_playing, over
-    let peer, gameConn, lobbyConn, myPeerId, isHost = false;
-    let localPlayerReady = false, remotePlayerReady = false;
+    let localBird, remoteBird, obstacles, background, score, highScores;
+    let gameState = 'loading'; // loading, single_player, multiplayer_playing, over
+    let peer, gameConn, myPeerId, isHost = false;
+    let localPlayerReady = false, remotePlayerReady = false, remoteFinalScore = null;
     let lastTime = 0, timeToNextObstacle = 0;
-    const LOBBY_ID = 'stupid-bird-lobby-999';
     const gravity = 0.4, jumpStrength = 8, obstacleSpeed = 3;
     const birdCollisionBox = { x: 5, y: 8, width: 34, height: 24 };
 
@@ -77,6 +76,8 @@ document.addEventListener('DOMContentLoaded', () => {
             obstacles.forEach(obs => obs.x -= obstacleSpeed * deltaTime);
             obstacles = obstacles.filter(obs => obs.x + obs.width > 0);
         }
+        
+        score = parseFloat(((Date.now() - startTime) / 1000).toFixed(2));
 
         if (gameConn) {
             gameConn.send({ type: 'BIRD_POS', payload: { y: localBird.y } });
@@ -84,7 +85,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         checkCollisions();
-        score = parseFloat(((Date.now() - startTime) / 1000).toFixed(2));
     }
 
     function draw() {
@@ -101,10 +101,11 @@ document.addEventListener('DOMContentLoaded', () => {
         scoreEl.textContent = score;
     }
 
-    // --- Game State ---
+    // --- Game State & UI ---
     function resetGame(mode) {
         localPlayerReady = false;
         remotePlayerReady = false;
+        remoteFinalScore = null;
         gameState = mode;
         isHost = (mode === 'single_player' || isHost);
         localBird = { x: 100, y: 250, width: 45, height: 45, velocityY: 0 };
@@ -123,8 +124,20 @@ document.addEventListener('DOMContentLoaded', () => {
     function endGame(winner = false) {
         if (gameState === 'over') return;
         gameState = 'over';
-        if (gameConn) gameConn.send({ type: 'GAME_OVER' });
-        gameOverTitle.textContent = winner ? "You Win!" : "Game Over";
+        newGameButton.disabled = false;
+        newGameButton.textContent = 'New Game';
+
+        if (gameConn) {
+            gameConn.send({ type: 'FINAL_SCORE', payload: { score: score } });
+            gameOverContainer.classList.add('multiplayer-results-mode');
+            myFinalScoreEl.textContent = `${score}s`;
+            opponentFinalScoreEl.textContent = remoteFinalScore ? `${remoteFinalScore}s` : "Still playing...";
+            gameOverTitle.textContent = winner ? "You Win!" : "You Lose!";
+        } else {
+            gameOverContainer.classList.remove('multiplayer-results-mode');
+            finalScoreEl.textContent = score;
+            gameOverTitle.textContent = "Game Over";
+        }
         gameOverContainer.classList.add('visible');
     }
 
@@ -149,10 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
         myPeerIdEl.textContent = myPeerId;
         peer = new Peer(myPeerId, { config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }] } });
 
-        peer.on('open', () => {
-            connectionStatusEl.textContent = "Lobby connected. Waiting for players...";
-            // Simplified lobby: just be ready for connections.
-        });
+        peer.on('open', () => connectionStatusEl.textContent = "Ready to connect.");
         peer.on('connection', setupGameConnection);
         peer.on('error', err => { console.error("PeerJS Error:", err); connectionStatusEl.textContent = err.type; });
     }
@@ -160,17 +170,23 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupGameConnection(newConn) {
         if (gameConn) gameConn.close();
         gameConn = newConn;
-        isHost = true; // The one who receives the connection is the host
-        connectionStatusEl.textContent = `Connected with ${gameConn.peer}. Click Start.`;
-        startGameButton.style.display = 'block';
-        
-        gameConn.on('open', () => {}); // Connection is already open
+        isHost = true;
+        connectionStatusEl.textContent = `Connected to ${gameConn.peer}!`;
+        gameOverTitle.textContent = "Ready to Play?";
+        gameOverContainer.classList.add('multiplayer-results-mode');
+        myFinalScoreEl.textContent = "-";
+        opponentFinalScoreEl.textContent = "-";
+        gameOverContainer.classList.add('visible');
 
         gameConn.on('data', data => {
             switch (data.type) {
                 case 'BIRD_POS': if(remoteBird) remoteBird.y = data.payload.y; break;
                 case 'OBSTACLES': obstacles.push(...data.payload); break;
                 case 'SCORE': opponentScoreEl.textContent = data.payload.score.toFixed(2); break;
+                case 'FINAL_SCORE': 
+                    remoteFinalScore = data.payload.score;
+                    opponentFinalScoreEl.textContent = `${remoteFinalScore}s`;
+                    break;
                 case 'GAME_OVER': endGame(true); break;
                 case 'READY': 
                     remotePlayerReady = true; 
@@ -183,7 +199,6 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Opponent disconnected.');
             resetGame('single_player');
             gameConn = null;
-            startGameButton.style.display = 'none';
         });
     }
 
@@ -191,7 +206,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!gameConn) return;
         localPlayerReady = true;
         gameConn.send({ type: 'READY' });
-        connectionStatusEl.textContent = 'Ready! Waiting for opponent...';
+        newGameButton.disabled = true;
+        newGameButton.textContent = 'Waiting...';
         checkIfBothReady();
     }
 
@@ -211,14 +227,13 @@ document.addEventListener('DOMContentLoaded', () => {
     connectButton.addEventListener('click', () => {
         const remoteId = peerIdInput.value.trim();
         if (remoteId && remoteId !== myPeerId) {
-            isHost = false; // The one who initiates is the client
+            isHost = false;
             setupGameConnection(peer.connect(remoteId));
         }
     });
 
-    startGameButton.addEventListener('click', playerReady);
     newGameButton.addEventListener('click', () => {
-        if (gameConn) {
+        if (gameConn && gameState === 'over') {
             playerReady();
         } else {
             resetGame('single_player');

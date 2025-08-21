@@ -14,7 +14,6 @@
         <div class="p2p-section">
             <div>Your ID: <strong id="my-peer-id">...</strong></div>
             <p>Status: <span id="connection-status">Initializing...</span></p>
-            <button id="start-game-button" style="display: none;">Start Game</button>
         </div>
         <div class="p2p-section">
             <input type="text" id="peer-id-input" placeholder="Enter opponent's ID">
@@ -33,22 +32,20 @@
             <div id="opponent-score-container">Opponent: <span id="opponent-score">0</span>s</div>
             <div id="debug-container">
                 <h3>Debug Options</h3>
-                <button id="decrease-jump">Jump --</button>
-                <span id="jump-strength">9</span>
-                <button id="increase-jump">Jump ++</button>
-                <br>
-                <button id="decrease-gravity">Gravity --</button>
-                <span id="gravity-strength">0.5</span>
-                <button id="increase-gravity">Gravity ++</button>
-                <br>
                 <button id="toggle-debug">Toggle Hitbox</button>
             </div>
         </div>
         <div id="game-over-container">
             <h2 id="game-over-title">Game Over</h2>
-            <p>Your Time: <span id="final-score">0</span>s</p>
-            <h3>Best Records (Top 5)</h3>
-            <ol id="high-scores"></ol>
+            <div id="single-player-results">
+                <p>Your Time: <span id="final-score">0</span>s</p>
+                <h3>Best Records (Top 5)</h3>
+                <ol id="high-scores"></ol>
+            </div>
+            <div id="multiplayer-results">
+                <p>My Record: <span id="my-final-score">0</span>s</p>
+                <p>Opponent: <span id="opponent-final-score">...</span></p>
+            </div>
             <button id="new-game-button">New Game</button>
         </div>
     </div>

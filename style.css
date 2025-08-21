@@ -68,14 +68,6 @@ h1 {
     background-color: #2ecc71;
 }
 
-#start-game-button {
-    background-color: #8e44ad;
-    margin-top: 5px;
-}
-#start-game-button:hover {
-    background-color: #9b59b6;
-}
-
 #p2p-container p {
     margin: 10px 0 0 0;
     font-size: 14px;
@@ -186,6 +178,18 @@ h1 {
     animation: pop-in-bouncy 0.6s cubic-bezier(0.68, -0.55, 0.27, 1.55) forwards;
 }
 
+/* Result display logic */
+#multiplayer-results {
+    display: none;
+}
+#game-over-container.multiplayer-results-mode #multiplayer-results {
+    display: block;
+}
+#game-over-container.multiplayer-results-mode #single-player-results {
+    display: none;
+}
+
+
 #new-game-button {
     position: relative;
     padding: 12px 25px;
@@ -196,10 +200,10 @@ h1 {
     border: none;
     border-radius: 10px;
     color: white;
-    background-color: #2980b9; /* Blue 3D Button Style */
+    background-color: #2980b9;
     box-shadow: 0 5px #1f648d;
     transition: all 0.1s ease-in-out;
-    width: auto; /* Override width from #p2p-container button */
+    width: auto;
 }
 
 #new-game-button:hover {
@@ -209,4 +213,10 @@ h1 {
 #new-game-button:active {
     top: 4px;
     box-shadow: 0 1px #1f648d;
+}
+
+#new-game-button:disabled {
+    background-color: #bdc3c7;
+    box-shadow: 0 5px #95a5a6;
+    cursor: not-allowed;
 }
