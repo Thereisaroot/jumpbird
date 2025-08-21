@@ -3,17 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jump Jump Stupid Bird</title>
+    <title>Jump Jump Stupid Bird - P2P</title>
+    <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
     <link rel="stylesheet" href="style.css">
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2541515643735912"
-     crossorigin="anonymous"></script>
 </head>
 <body>
     <h1>Jump Jump Stupid Bird</h1>
+
+    <div id="p2p-container">
+        <div class="p2p-section">
+            <div>Your ID: <strong id="my-peer-id">...</strong></div>
+            <p>Status: <span id="connection-status">Initializing...</span></p>
+            <button id="start-game-button" style="display: none;">Start Game</button>
+        </div>
+        <div class="p2p-section">
+            <input type="text" id="peer-id-input" placeholder="Enter opponent's ID">
+            <button id="connect-button">Manual Connect</button>
+        </div>
+        <div id="user-list-container" class="p2p-section">
+            <h3>Other Players</h3>
+            <ul id="user-list"></ul>
+        </div>
+    </div>
+
     <div id="game-container">
         <canvas id="game-canvas" width="480" height="640"></canvas>
         <div id="ui-container">
             <div id="score-container">Time: <span id="score">0</span>s</div>
+            <div id="opponent-score-container">Opponent: <span id="opponent-score">0</span>s</div>
             <div id="debug-container">
                 <h3>Debug Options</h3>
                 <button id="decrease-jump">Jump --</button>
@@ -27,8 +44,8 @@
                 <button id="toggle-debug">Toggle Hitbox</button>
             </div>
         </div>
-        <div id="game-over-container" class="hidden">
-            <h2>Game Over</h2>
+        <div id="game-over-container">
+            <h2 id="game-over-title">Game Over</h2>
             <p>Your Time: <span id="final-score">0</span>s</p>
             <h3>Best Records (Top 5)</h3>
             <ol id="high-scores"></ol>
