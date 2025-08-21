@@ -15,14 +15,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const peerIdInput = getEl('peer-id-input');
     const connectButton = getEl('connect-button');
     const connectionStatusEl = getEl('connection-status');
+    const userListEl = getEl('user-list');
     const newGameButton = getEl('new-game-button');
 
     // --- Game State & Constants ---
-    let localBird, remoteBird, obstacles, background, score, highScores;
-    let gameState = 'loading'; // loading, single_player, multiplayer_playing, over
+    let localBird, remoteBird, obstacles, background, score;
+    let gameState = 'loading';
     let peer, gameConn, myPeerId, isHost = false;
-    let localPlayerReady = false, remotePlayerReady = false, remoteFinalScore = null;
+    let localPlayerReady = false, remotePlayerReady = false, remoteFinalScore = null, remotePlayerFinished = false;
     let lastTime = 0, timeToNextObstacle = 0;
+    const LOBBY_ID = 'stupid-bird-flock-lobby-v3-final';
     const gravity = 0.4, jumpStrength = 8, obstacleSpeed = 3;
     const birdCollisionBox = { x: 5, y: 8, width: 34, height: 24 };
 
@@ -54,21 +56,16 @@ document.addEventListener('DOMContentLoaded', () => {
     function update(deltaTime) {
         localBird.velocityY += gravity * deltaTime;
         localBird.y += localBird.velocityY * deltaTime;
-
         const overlap = 3;
         background.x1 -= background.speed * deltaTime;
         background.x2 -= background.speed * deltaTime;
         if (background.x1 <= -canvas.width) background.x1 = background.x2 + canvas.width - overlap;
         if (background.x2 <= -canvas.width) background.x2 = background.x1 + canvas.width - overlap;
-
         if (isHost) {
             timeToNextObstacle -= deltaTime;
             if (timeToNextObstacle <= 0) {
                 const oWidth = 80 + Math.random() * 50, gap = 220, topH = Math.random() * (canvas.height - gap - 150) + 75;
-                const newObs = [
-                    { x: canvas.width, y: 0, width: oWidth, height: topH },
-                    { x: canvas.width, y: topH + gap, width: oWidth, height: canvas.height - topH - gap }
-                ];
+                const newObs = [{ x: canvas.width, y: 0, width: oWidth, height: topH }, { x: canvas.width, y: topH + gap, width: oWidth, height: canvas.height - topH - gap }];
                 obstacles.push(...newObs);
                 if (gameConn) gameConn.send({ type: 'OBSTACLES', payload: newObs });
                 timeToNextObstacle = 120;
@@ -76,14 +73,10 @@ document.addEventListener('DOMContentLoaded', () => {
             obstacles.forEach(obs => obs.x -= obstacleSpeed * deltaTime);
             obstacles = obstacles.filter(obs => obs.x + obs.width > 0);
         }
-        
         score = parseFloat(((Date.now() - startTime) / 1000).toFixed(2));
-
-        if (gameConn) {
+        if (gameConn && gameState === 'multiplayer_playing') {
             gameConn.send({ type: 'BIRD_POS', payload: { y: localBird.y } });
-            gameConn.send({ type: 'SCORE', payload: { score: score } });
         }
-
         checkCollisions();
     }
 
@@ -103,36 +96,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Game State & UI ---
     function resetGame(mode) {
-        localPlayerReady = false;
-        remotePlayerReady = false;
-        remoteFinalScore = null;
+        localPlayerReady = false; remotePlayerReady = false; remoteFinalScore = null; remotePlayerFinished = false;
         gameState = mode;
         isHost = (mode === 'single_player' || isHost);
         localBird = { x: 100, y: 250, width: 45, height: 45, velocityY: 0 };
         remoteBird = (mode === 'multiplayer_playing') ? { x: 100, y: 250, width: 45, height: 45 } : null;
         uiContainer.classList.toggle('multiplayer-mode', mode === 'multiplayer_playing');
         background = { x1: 0, x2: canvas.width, speed: 2 };
-        obstacles = [];
-        score = 0;
-        startTime = Date.now();
-        timeToNextObstacle = 0;
-        lastTime = performance.now();
+        obstacles = []; score = 0; startTime = Date.now(); timeToNextObstacle = 0; lastTime = performance.now();
         gameOverContainer.classList.remove('visible');
         uiContainer.style.display = 'block';
     }
 
-    function endGame(winner = false) {
+    function endGame() {
         if (gameState === 'over') return;
         gameState = 'over';
-        newGameButton.disabled = false;
-        newGameButton.textContent = 'New Game';
+        newGameButton.disabled = false; newGameButton.textContent = 'New Game';
 
         if (gameConn) {
-            gameConn.send({ type: 'FINAL_SCORE', payload: { score: score } });
+            gameConn.send({ type: 'GAME_OVER', payload: { score: score } });
             gameOverContainer.classList.add('multiplayer-results-mode');
             myFinalScoreEl.textContent = `${score}s`;
-            opponentFinalScoreEl.textContent = remoteFinalScore ? `${remoteFinalScore}s` : "Still playing...";
-            gameOverTitle.textContent = winner ? "You Win!" : "You Lose!";
+            if (remotePlayerFinished) {
+                const winner = score > remoteFinalScore;
+                gameOverTitle.textContent = winner ? "You Win!" : "You Lose!";
+                opponentFinalScoreEl.textContent = `${remoteFinalScore}s`;
+            } else {
+                gameOverTitle.textContent = "Finished!";
+                opponentFinalScoreEl.textContent = "Opponent is playing...";
+            }
         } else {
             gameOverContainer.classList.remove('multiplayer-results-mode');
             finalScoreEl.textContent = score;
@@ -149,11 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    function jump() {
-        if (['single_player', 'multiplayer_playing'].includes(gameState)) {
-            localBird.velocityY = -jumpStrength;
-        }
-    }
+    function jump() { if (['single_player', 'multiplayer_playing'].includes(gameState)) localBird.velocityY = -jumpStrength; }
 
     // --- P2P Networking ---
     function initializePeerSystem() {
@@ -161,10 +149,50 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('stupid-bird-peer-id', myPeerId);
         myPeerIdEl.textContent = myPeerId;
         peer = new Peer(myPeerId, { config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }] } });
+        peer.on('open', () => { initializeLobbyPeer(); });
+        peer.on('connection', setupGameConnection); // For incoming game connections
+        peer.on('error', err => { console.error("PeerJS Error:", err); });
+    }
 
-        peer.on('open', () => connectionStatusEl.textContent = "Ready to connect.");
-        peer.on('connection', setupGameConnection);
-        peer.on('error', err => { console.error("PeerJS Error:", err); connectionStatusEl.textContent = err.type; });
+    function initializeLobbyPeer() {
+        const lobbyPeer = new Peer(LOBBY_ID);
+        let lobbyPeers = [];
+
+        lobbyPeer.on('open', () => {
+            connectionStatusEl.textContent = "Lobby: You are the host.";
+            lobbyPeers = [myPeerId];
+            updateUserList(lobbyPeers);
+            lobbyPeer.on('connection', (conn) => {
+                conn.on('data', (data) => {
+                    if (data.type === 'ANNOUNCE') {
+                        if (!lobbyPeers.includes(data.id)) lobbyPeers.push(data.id);
+                        broadcastPeerList(lobbyPeer, lobbyPeers);
+                    }
+                });
+                conn.on('close', () => {
+                    lobbyPeers = lobbyPeers.filter(p => p !== conn.peer);
+                    broadcastPeerList(lobbyPeer, lobbyPeers);
+                });
+            });
+        });
+
+        lobbyPeer.on('error', () => {
+            lobbyPeer.destroy();
+            const lobbyConn = peer.connect(LOBBY_ID, { reliable: true });
+            connectionStatusEl.textContent = "Lobby: Connecting...";
+            lobbyConn.on('open', () => {
+                connectionStatusEl.textContent = "Lobby: Connected.";
+                lobbyConn.send({ type: 'ANNOUNCE', id: myPeerId });
+            });
+            lobbyConn.on('data', (data) => { if (data.type === 'PEER_LIST') updateUserList(data.list); });
+            lobbyConn.on('close', () => { connectionStatusEl.textContent = "Lobby disconnected."; userListEl.innerHTML = ''; });
+        });
+    }
+
+    function broadcastPeerList(lobbyPeer, lobbyPeers) {
+        Object.values(lobbyPeer.connections).flat().forEach(conn => {
+            conn.send({ type: 'PEER_LIST', list: lobbyPeers });
+        });
     }
 
     function setupGameConnection(newConn) {
@@ -174,47 +202,50 @@ document.addEventListener('DOMContentLoaded', () => {
         connectionStatusEl.textContent = `Connected to ${gameConn.peer}!`;
         gameOverTitle.textContent = "Ready to Play?";
         gameOverContainer.classList.add('multiplayer-results-mode');
-        myFinalScoreEl.textContent = "-";
-        opponentFinalScoreEl.textContent = "-";
+        myFinalScoreEl.textContent = "-"; opponentFinalScoreEl.textContent = "-";
         gameOverContainer.classList.add('visible');
+        uiContainer.style.display = 'none';
 
         gameConn.on('data', data => {
             switch (data.type) {
                 case 'BIRD_POS': if(remoteBird) remoteBird.y = data.payload.y; break;
                 case 'OBSTACLES': obstacles.push(...data.payload); break;
-                case 'SCORE': opponentScoreEl.textContent = data.payload.score.toFixed(2); break;
-                case 'FINAL_SCORE': 
+                case 'GAME_OVER': 
+                    remotePlayerFinished = true;
                     remoteFinalScore = data.payload.score;
-                    opponentFinalScoreEl.textContent = `${remoteFinalScore}s`;
+                    remoteBird = null; // Remove remote bird from screen
+                    opponentScoreEl.textContent = `Finished: ${remoteFinalScore}`;
                     break;
-                case 'GAME_OVER': endGame(true); break;
-                case 'READY': 
-                    remotePlayerReady = true; 
-                    connectionStatusEl.textContent = `Opponent is ready!`;
-                    checkIfBothReady(); 
-                    break;
+                case 'READY': remotePlayerReady = true; connectionStatusEl.textContent = `Opponent is ready!`; checkIfBothReady(); break;
             }
         });
-        gameConn.on('close', () => {
-            alert('Opponent disconnected.');
-            resetGame('single_player');
-            gameConn = null;
-        });
+        gameConn.on('close', () => { alert('Opponent disconnected.'); resetGame('single_player'); gameConn = null; });
     }
 
     function playerReady() {
         if (!gameConn) return;
         localPlayerReady = true;
         gameConn.send({ type: 'READY' });
-        newGameButton.disabled = true;
-        newGameButton.textContent = 'Waiting...';
+        newGameButton.disabled = true; newGameButton.textContent = 'Waiting...';
         checkIfBothReady();
     }
 
-    function checkIfBothReady() {
-        if (localPlayerReady && remotePlayerReady) {
-            resetGame('multiplayer_playing');
-        }
+    function checkIfBothReady() { if (localPlayerReady && remotePlayerReady) resetGame('multiplayer_playing'); }
+
+    function updateUserList(peerIds) {
+        userListEl.innerHTML = '';
+        peerIds.filter(id => id !== myPeerId).forEach(id => {
+            const li = document.createElement('li');
+            li.textContent = id;
+            const button = document.createElement('button');
+            button.textContent = 'Connect';
+            button.onclick = () => {
+                isHost = false;
+                setupGameConnection(peer.connect(id, { reliable: true }));
+            };
+            li.appendChild(button);
+            userListEl.appendChild(li);
+        });
     }
 
     // --- Initial Load & Event Listeners ---
@@ -228,16 +259,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const remoteId = peerIdInput.value.trim();
         if (remoteId && remoteId !== myPeerId) {
             isHost = false;
-            setupGameConnection(peer.connect(remoteId));
+            setupGameConnection(peer.connect(remoteId, { reliable: true }));
         }
     });
 
     newGameButton.addEventListener('click', () => {
-        if (gameConn && gameState === 'over') {
-            playerReady();
-        } else {
-            resetGame('single_player');
-        }
+        if (gameConn) { playerReady(); } 
+        else { resetGame('single_player'); }
     });
 
     window.addEventListener('keydown', e => { if (e.code === 'Space') jump(); });
