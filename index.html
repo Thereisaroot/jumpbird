@@ -11,17 +11,23 @@
     <h1>Jump Jump Stupid Bird</h1>
 
     <div id="p2p-container">
-        <div class="p2p-section">
+        <div id="my-info-section">
             <div>Your ID: <strong id="my-peer-id">...</strong></div>
-            <p>Status: <span id="connection-status">Initializing...</span></p>
+            <div class="nickname-section">
+                <input type="text" id="nickname-input" placeholder="Enter nickname">
+                <button id="save-nickname-button">Save</button>
+            </div>
         </div>
-        <div class="p2p-section">
-            <input type="text" id="peer-id-input" placeholder="Enter opponent's ID">
-            <button id="connect-button">Manual Connect</button>
-        </div>
-        <div id="user-list-container" class="p2p-section">
+        <div id="user-list-container">
             <h3>Other Players</h3>
             <ul id="user-list"></ul>
+        </div>
+        <div id="status-section">
+            <p>Status: <span id="connection-status">Initializing...</span></p>
+        </div>
+        <div id="manual-connect-section">
+            <input type="text" id="peer-id-input" placeholder="Enter opponent's ID">
+            <button id="connect-button">Manual Connect</button>
         </div>
     </div>
 
