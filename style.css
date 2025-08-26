@@ -27,6 +27,86 @@ h1 {
     margin-bottom: 10px;
 }
 
+#p2p-container {
+    display: flex;
+    gap: 15px;
+    background-color: #fff;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    margin-bottom: 15px;
+    width: 90%;
+    max-width: 600px;
+    justify-content: space-around;
+    align-items: flex-start;
+}
+
+.p2p-section {
+    flex: 1;
+    text-align: center;
+}
+
+#p2p-container input {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    margin: 5px 0;
+    width: calc(100% - 18px);
+}
+
+#p2p-container button {
+    padding: 8px 15px;
+    border: none;
+    border-radius: 4px;
+    background-color: #27ae60;
+    color: white;
+    cursor: pointer;
+    width: 100%;
+}
+
+#p2p-container button:hover {
+    background-color: #2ecc71;
+}
+
+#p2p-container p {
+    margin: 10px 0 0 0;
+    font-size: 14px;
+}
+
+#user-list-container h3 {
+    margin-top: 0;
+    margin-bottom: 5px;
+}
+
+#user-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 100px;
+    overflow-y: auto;
+    background: #f9f9f9;
+    border: 1px solid #eee;
+    border-radius: 4px;
+}
+
+#user-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 8px;
+    border-bottom: 1px solid #eee;
+}
+
+#user-list li:last-child {
+    border-bottom: none;
+}
+
+#user-list button {
+    padding: 3px 8px;
+    font-size: 12px;
+    width: auto;
+}
+
 #game-container {
     position: relative;
     width: 480px;
@@ -36,7 +116,7 @@ h1 {
 }
 
 #game-canvas {
-    background-color: black; /* Black background during load */
+    background-color: black;
     display: block;
 }
 
@@ -55,24 +135,25 @@ h1 {
     font-weight: bold;
 }
 
+#opponent-score-container {
+    font-size: 18px;
+    font-weight: normal;
+    opacity: 0.8;
+    display: none;
+}
+
+#ui-container.multiplayer-mode #opponent-score-container {
+    display: block;
+}
+
 #debug-container {
     position: absolute;
-    top: 40px;
+    top: 80px;
     left: 0;
     background-color: rgba(0, 0, 0, 0.5);
     padding: 10px;
     border-radius: 5px;
     display: none;
-}
-
-#debug-container h3 {
-    margin-top: 0;
-    font-size: 16px;
-}
-
-#debug-container button {
-    padding: 5px;
-    margin: 2px;
 }
 
 #game-over-container {
@@ -81,15 +162,10 @@ h1 {
     left: 50%;
     width: 80%;
     background-color: rgba(255, 255, 255, 0.6);
-    background-image: linear-gradient(to bottom, rgba(255,255,255,0.7), rgba(255,255,255,0.5));
     padding: 20px;
     border-radius: 15px;
-    border: 2px solid #fff;
     text-align: center;
     box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-    color: #333;
-    text-shadow: 1px 1px 2px #fff;
-    /* Animation properties */
     transform: translate(-50%, -50%) scale(0);
     opacity: 0;
     pointer-events: none;
@@ -102,25 +178,17 @@ h1 {
     animation: pop-in-bouncy 0.6s cubic-bezier(0.68, -0.55, 0.27, 1.55) forwards;
 }
 
-#game-over-container h2 {
-    color: #d35400;
+/* Result display logic */
+#multiplayer-results {
+    display: none;
+}
+#game-over-container.multiplayer-results-mode #multiplayer-results {
+    display: block;
+}
+#game-over-container.multiplayer-results-mode #single-player-results {
+    display: none;
 }
 
-#game-over-container p {
-    font-size: 28px;
-    font-weight: bold;
-    color: #2c3e50;
-    margin: 10px 0;
-}
-
-#high-scores {
-    list-style-position: inside;
-    padding-left: 0;
-    text-align: left;
-    background-color: rgba(0,0,0,0.05);
-    border-radius: 5px;
-    padding: 10px;
-}
 
 #new-game-button {
     position: relative;
@@ -135,9 +203,20 @@ h1 {
     background-color: #2980b9;
     box-shadow: 0 5px #1f648d;
     transition: all 0.1s ease-in-out;
+    width: auto;
+}
+
+#new-game-button:hover {
+    background-color: #3498db;
 }
 
 #new-game-button:active {
     top: 4px;
     box-shadow: 0 1px #1f648d;
+}
+
+#new-game-button:disabled {
+    background-color: #bdc3c7;
+    box-shadow: 0 5px #95a5a6;
+    cursor: not-allowed;
 }
