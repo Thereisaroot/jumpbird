@@ -23,10 +23,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Game State & Constants ---
     let localBird, remoteBird, obstacles, background, score;
     let gameState = 'loading';
-    let peer, gameConn, myPeerId, myNickname, isHost = false, lobbyPeers = [];
+    let peer, gameConn, myPeerId, myNickname, isHost = false, isLobbyHost = false, lobbyPeer, lobbyPeers = [];
     let localPlayerReady = false, remotePlayerReady = false, remoteFinalScore = null, remotePlayerFinished = false;
     let lastTime = 0, timeToNextObstacle = 0;
-    const LOBBY_SERVER_URL = 'wss://game.qwpo.cc:8080'; // <-- IMPORTANT: CHANGE THIS
+    const LOBBY_SERVER_URL = 'wss://game.qwpo.cc:8080';
     const gravity = 0.4, jumpStrength = 8, obstacleSpeed = 3;
     const birdCollisionBox = { x: 5, y: 8, width: 34, height: 24 };
 
@@ -47,41 +47,78 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!lastTime) lastTime = currentTime;
         const deltaTime = (currentTime - lastTime) / (1000 / 60);
         lastTime = currentTime;
+
         if (['single_player', 'multiplayer_playing'].includes(gameState)) {
             update(deltaTime);
-            draw();
         }
+        
+        draw();
         requestAnimationFrame(gameLoop);
     }
 
     // --- Update & Draw ---
     function update(deltaTime) {
-        localBird.velocityY += gravity * deltaTime;
-        localBird.y += localBird.velocityY * deltaTime;
+        // Background Scrolling
         const overlap = 3;
         background.x1 -= background.speed * deltaTime;
         background.x2 -= background.speed * deltaTime;
         if (background.x1 <= -canvas.width) background.x1 = background.x2 + canvas.width - overlap;
         if (background.x2 <= -canvas.width) background.x2 = background.x1 + canvas.width - overlap;
 
+        // Player state update
+        localBird.velocityY += gravity * deltaTime;
+        localBird.y += localBird.velocityY * deltaTime;
+
+        // Obstacle Generation (Host only)
         if (isHost) {
             timeToNextObstacle -= deltaTime;
             if (timeToNextObstacle <= 0) {
-                const oWidth = 80 + Math.random() * 50, gap = 220, topH = Math.random() * (canvas.height - gap - 150) + 75;
-                const newObs = [{ x: canvas.width, y: 0, width: oWidth, height: topH }, { x: canvas.width, y: topH + gap, width: oWidth, height: canvas.height - topH - gap }];
-                obstacles.push(...newObs);
-                if (gameConn && gameConn.open) {
-                    gameConn.send({ type: 'OBSTACLES', payload: newObs });
+                const allNewObs = [];
+                let currentX = canvas.width;
+
+                const isCluster = Math.random() < 0.25;
+                const pipesToGenerate = isCluster ? (Math.random() < 0.5 ? 2 : 3) : 1;
+                
+                const gap = canvas.height * 0.3; // Max 30% of canvas height
+                let topH;
+
+                if (pipesToGenerate > 1) { // Cluster case (narrow horizontal gap)
+                    // Restrict the vertical position to be less extreme
+                    const verticalMargin = canvas.height * 0.2; // 20% margin from top and bottom
+                    topH = Math.random() * (canvas.height - gap - (2 * verticalMargin)) + verticalMargin;
+                } else { // Single pipe case
+                    // Original, more varied vertical position
+                    topH = Math.random() * (canvas.height - gap - 150) + 75;
                 }
+
+                for (let i = 0; i < pipesToGenerate; i++) {
+                    const oWidth = 80 + Math.random() * 50;
+                    
+                    const newPair = [
+                        { x: currentX, y: 0, width: oWidth, height: topH },
+                        { x: currentX, y: topH + gap, width: oWidth, height: canvas.height - topH - gap }
+                    ];
+                    
+                    allNewObs.push(...newPair);
+                    currentX += oWidth + 180;
+                }
+
+                obstacles.push(...allNewObs);
+                if (gameConn && gameConn.open) {
+                    gameConn.send({ type: 'OBSTACLES', payload: allNewObs });
+                }
+                
                 timeToNextObstacle = 120;
             }
         }
 
+        // Obstacle Movement & Filtering
         obstacles.forEach(obs => obs.x -= obstacleSpeed * deltaTime);
         obstacles = obstacles.filter(obs => obs.x + obs.width > 0);
 
+        // Score and network update
         score = parseFloat(((Date.now() - startTime) / 1000).toFixed(2));
-        if (gameConn && gameConn.open && gameState === 'multiplayer_playing') {
+        if (gameConn && gameConn.open) {
             gameConn.send({ type: 'BIRD_POS', payload: { y: localBird.y } });
         }
         checkCollisions();
@@ -177,14 +214,13 @@ document.addEventListener('DOMContentLoaded', () => {
             config: {
                 'iceServers': [
                     { urls: 'stun:stun.l.google.com:19302' },
-                    {                         urls: 'turn:game.qwpo.cc:3478', username: 'testuser', credential: 'testpass' }
+                    { urls: 'turn:game.qwpo.cc:3478', username: 'testuser', credential: 'testpass' }
                 ]
             }
         };
 
         peer = new Peer(myPeerId, peerJsConfig);
         peer.on('open', () => {
-            // Connect to the new lobby server instead of the old P2P lobby
             connectToLobbyServer();
         });
         peer.on('connection', (newConn) => {
@@ -199,7 +235,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         socket.onopen = () => {
             connectionStatusEl.textContent = "Lobby: Connected";
-            console.log('Connected to lobby server.');
             socket.send(JSON.stringify({ type: 'ANNOUNCE', id: myPeerId }));
         };
 
@@ -217,7 +252,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         socket.onclose = () => {
             connectionStatusEl.textContent = "Lobby: Disconnected";
-            console.log('Disconnected from lobby server. Retrying in 3s...');
             setTimeout(connectToLobbyServer, 3000);
         };
 
