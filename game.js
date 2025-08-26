@@ -23,10 +23,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Game State & Constants ---
     let localBird, remoteBird, obstacles, background, score;
     let gameState = 'loading';
-    let peer, gameConn, myPeerId, myNickname, isHost = false, isLobbyHost = false, lobbyPeer, lobbyPeers = [];
+    let peer, gameConn, myPeerId, myNickname, isHost = false, lobbyPeers = [];
     let localPlayerReady = false, remotePlayerReady = false, remoteFinalScore = null, remotePlayerFinished = false;
     let lastTime = 0, timeToNextObstacle = 0;
-    const LOBBY_ID = 'stupid-bird-flock-lobby-v3-final';
+    const LOBBY_SERVER_URL = 'wss://game.qwpo.cc:8080'; // <-- IMPORTANT: CHANGE THIS
     const gravity = 0.4, jumpStrength = 8, obstacleSpeed = 3;
     const birdCollisionBox = { x: 5, y: 8, width: 34, height: 24 };
 
@@ -177,18 +177,54 @@ document.addEventListener('DOMContentLoaded', () => {
             config: {
                 'iceServers': [
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'turn:91.99.226.49:3478', username: 'testuser', credential: 'testpass' }
+                    {                         urls: 'turn:game.qwpo.cc:3478', username: 'testuser', credential: 'testpass' }
                 ]
             }
         };
 
         peer = new Peer(myPeerId, peerJsConfig);
-        peer.on('open', () => { initializeLobbyPeer(); });
+        peer.on('open', () => {
+            // Connect to the new lobby server instead of the old P2P lobby
+            connectToLobbyServer();
+        });
         peer.on('connection', (newConn) => {
             isHost = true;
             setupGameConnection(newConn);
         });
         peer.on('error', err => { console.error("PeerJS Error:", err); });
+    }
+
+    function connectToLobbyServer() {
+        const socket = new WebSocket(LOBBY_SERVER_URL);
+
+        socket.onopen = () => {
+            connectionStatusEl.textContent = "Lobby: Connected";
+            console.log('Connected to lobby server.');
+            socket.send(JSON.stringify({ type: 'ANNOUNCE', id: myPeerId }));
+        };
+
+        socket.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'PEER_LIST') {
+                    lobbyPeers = data.list;
+                    updateUserList(lobbyPeers);
+                }
+            } catch (e) {
+                console.error('Error parsing message from server:', e);
+            }
+        };
+
+        socket.onclose = () => {
+            connectionStatusEl.textContent = "Lobby: Disconnected";
+            console.log('Disconnected from lobby server. Retrying in 3s...');
+            setTimeout(connectToLobbyServer, 3000);
+        };
+
+        socket.onerror = (err) => {
+            console.error('Lobby socket error:', err);
+            connectionStatusEl.textContent = "Lobby: Error";
+        };
     }
 
     saveNicknameButton.addEventListener('click', () => {
@@ -201,59 +237,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    function initializeLobbyPeer() {
-        lobbyPeer = new Peer(LOBBY_ID);
-
-        lobbyPeer.on('open', () => {
-            isLobbyHost = true;
-            lobbyPeers = [myPeerId];
-            connectionStatusEl.textContent = "Lobby: You are the host.";
-            updateUserList(lobbyPeers);
-            lobbyPeer.on('connection', (conn) => {
-                conn.on('data', (data) => {
-                    if (data.type === 'ANNOUNCE') {
-                        if (!lobbyPeers.includes(data.id)) {
-                            lobbyPeers.push(data.id);
-                        }
-                        updateUserList(lobbyPeers);
-                        broadcastPeerList(lobbyPeer, lobbyPeers);
-                    }
-                });
-                conn.on('close', () => {
-                    // Only remove peer if we are not in an active game with them
-                    if (!gameConn || gameConn.peer !== conn.peer) {
-                        lobbyPeers = lobbyPeers.filter(p => p !== conn.peer);
-                        updateUserList(lobbyPeers);
-                        broadcastPeerList(lobbyPeer, lobbyPeers);
-                    }
-                });
-            });
-        });
-
-        lobbyPeer.on('error', () => {
-            lobbyPeer.destroy();
-            const lobbyConn = peer.connect(LOBBY_ID, { reliable: true });
-            connectionStatusEl.textContent = "Lobby: Connecting...";
-            lobbyConn.on('open', () => {
-                connectionStatusEl.textContent = "Lobby: Connected.";
-                lobbyConn.send({ type: 'ANNOUNCE', id: myPeerId });
-            });
-            lobbyConn.on('data', (data) => {
-                if (data.type === 'PEER_LIST') {
-                    lobbyPeers = data.list; // Client updates its own list
-                    updateUserList(lobbyPeers);
-                }
-            });
-            lobbyConn.on('close', () => { connectionStatusEl.textContent = "Lobby disconnected."; userListEl.innerHTML = ''; });
-        });
-    }
-
-    function broadcastPeerList(lobbyPeer, lobbyPeers) {
-        Object.values(lobbyPeer.connections).flat().forEach(conn => {
-            conn.send({ type: 'PEER_LIST', list: lobbyPeers });
-        });
-    }
-
     function setupGameConnection(newConn) {
         if (gameConn) {
             gameConn.close();
@@ -262,9 +245,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         gameConn.once('open', () => {
             connectionStatusEl.textContent = `Connected to ${gameConn.peer}!`;
-            if (isLobbyHost) {
-                broadcastPeerList(lobbyPeer, lobbyPeers);
-            }
             updateUserList(lobbyPeers);
         });
 
@@ -369,5 +349,5 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.addEventListener('keydown', e => { if (e.code === 'Space') jump(); });
-    canvas.addEventListener('click', jump);
+    window.addEventListener('click', jump);
 });
