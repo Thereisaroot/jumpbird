@@ -68,6 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
         multi: { x: 140, y: 320, w: 200, h: 50, text: 'Multi Play' },
         settings: { x: 140, y: 390, w: 200, h: 50, text: 'Settings' }
     };
+    const lobbyBackButton = { x: 20, y: canvas.height - 60, w: 200, h: 40, text: 'Back to Menu' };
     let lobbyButtons = [];
     const quitButton = { x: canvas.width - 110, y: 10, w: 100, h: 30, text: 'Quit' };
 
@@ -217,6 +218,14 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.textAlign = 'center';
             ctx.fillText(connectButton.text, connectButton.x + connectButton.w / 2, button.y + button.h / 2 + 6);
         });
+
+        // Draw the back button
+        const btn = lobbyBackButton;
+        drawRoundedRect(ctx, btn.x, btn.y, btn.w, btn.h, 15, '#e74c3c', 0.7);
+        ctx.fillStyle = 'white';
+        ctx.font = '14px "Press Start 2P"';
+        ctx.textAlign = 'center';
+        ctx.fillText(btn.text, btn.x + btn.w / 2, btn.y + btn.h / 2 + 7);
     }
 
     function drawCountdown() {
@@ -413,6 +422,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleLobbyClick(x, y) {
+        const backBtn = lobbyBackButton;
+        if (x >= backBtn.x && x <= backBtn.x + backBtn.w && y >= backBtn.y && y <= backBtn.y + backBtn.h) {
+            changeState(GAME_STATES.MENU);
+            return;
+        }
+
         lobbyButtons.forEach(button => {
             const cb = button.connectButton;
             if (!cb.disabled && x >= cb.x && x <= cb.x + cb.w && y >= button.y && y <= button.y + button.h) {
