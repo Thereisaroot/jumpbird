@@ -21,7 +21,8 @@ document.addEventListener('DOMContentLoaded', () => {
         bird: 'bird.png', 
         bg: 'bg.png', 
         longPlumbing: 'long_plumbing.png',
-        title: 'title.png'
+        title: 'title.png',
+        box: 'box.png'
     };
 
     function loadImages(callback) {
@@ -53,7 +54,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Game Objects & State ---
     let localBird, remoteBird, score, startTime, remoteScore;
     let obstacles = [];
-    let lastPipe = null;
+    let itemBoxes = [];
+    let particles = [];
+    let sizeEffect = { active: false, multiplier: 1, duration: 0, startTime: 0 };
     let background = { x1: 0, x2: canvas.width, speed: 2 };
     let localPlayerReady = false, remotePlayerReady = false, remoteFinalScore = null, remotePlayerFinished = false;
     let lastTime = 0, timeToNextObstacle = 0;
@@ -87,6 +90,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Central Update & Draw ---
     function update(deltaTime) {
         updateBackground(deltaTime);
+        updateItemBoxes(deltaTime);
+        updateParticles(deltaTime);
 
         // Player is only updated when they are actively playing.
         if (['playing_single', 'playing_multi'].includes(gameState)) {
@@ -123,11 +128,13 @@ document.addEventListener('DOMContentLoaded', () => {
             case GAME_STATES.PLAYING_MULTI:
             case GAME_STATES.GAME_OVER: // Keep drawing the game scene behind the popup
                 drawObstacles();
+                drawItemBoxes();
                 if (remoteBird) drawBird(remoteBird, 0.5);
                 if (localBird) drawBird(localBird, 1.0);
                 if (gameState !== GAME_STATES.GAME_OVER) drawPlayingUI();
                 break;
         }
+        drawParticles();
         drawLobbyStatus();
     }
 
@@ -174,7 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.fillStyle = 'white';
         ctx.font = '40px "Press Start 2P"';
         ctx.textAlign = 'center';
-        ctx.fillText('Main Menu', canvas.width / 2, 150);
+        ctx.fillText('Menu', canvas.width / 2, 150);
 
         const buttonColor = '#A7D9B7';
         const buttonAlpha = 0.5;
@@ -287,6 +294,41 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.drawImage(images.bg, background.x2, 0, canvas.width, canvas.height);
     }
 
+    function drawItemBoxes() {
+        itemBoxes.forEach(box => {
+            ctx.drawImage(images.box, box.x, box.y, box.width, box.height);
+        });
+    }
+
+    function drawParticles() {
+        particles.forEach(p => {
+            ctx.globalAlpha = p.life / p.initialLife;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1.0;
+        });
+    }
+
+    function spawnParticles(x, y, color) {
+        const count = 30;
+        for (let i = 0; i < count; i++) {
+            const angle = (i / count) * Math.PI * 2;
+            const speed = 2 + Math.random() * 4;
+            particles.push({
+                x: x,
+                y: y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                size: 2 + Math.random() * 3,
+                color: color,
+                initialLife: 40 + Math.random() * 30,
+                life: 40 + Math.random() * 30
+            });
+        }
+    }
+
     function drawObstacles() {
         obstacles.forEach(obs => {
             if (obs.y === 0) { // Top obstacle
@@ -303,7 +345,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function drawBird(bird, alpha) {
         ctx.globalAlpha = alpha;
-        ctx.drawImage(images.bird, bird.x, bird.y, bird.width, bird.height);
+        const birdSizeMultiplier = (bird === localBird && sizeEffect.active) ? sizeEffect.multiplier : 1;
+        const birdCurrentWidth = bird.width * birdSizeMultiplier;
+        const birdCurrentHeight = bird.height * birdSizeMultiplier;
+
+        // Draw bird centered on its original position
+        const drawX = bird.x + (bird.width - birdCurrentWidth) / 2;
+        const drawY = bird.y + (bird.height - birdCurrentHeight) / 2;
+
+        ctx.drawImage(images.bird, drawX, drawY, birdCurrentWidth, birdCurrentHeight);
         ctx.globalAlpha = 1.0;
     }
 
@@ -314,6 +364,29 @@ document.addEventListener('DOMContentLoaded', () => {
         background.x2 -= background.speed * deltaTime;
         if (background.x1 <= -canvas.width) background.x1 = background.x2 + canvas.width - overlap;
         if (background.x2 <= -canvas.width) background.x2 = background.x1 + canvas.width - overlap;
+    }
+
+    function updateItemBoxes(deltaTime) {
+        itemBoxes.forEach(box => {
+            box.x -= obstacleSpeed * deltaTime;
+            box.angle += 0.05 * deltaTime;
+            box.y = box.initialY + Math.sin(box.angle) * 5;
+        });
+        // Remove boxes that are off-screen
+        itemBoxes = itemBoxes.filter(box => box.x + box.width > 0);
+    }
+
+    function updateParticles(deltaTime) {
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.x += p.vx * deltaTime;
+            p.y += p.vy * deltaTime;
+            p.vy += 0.05 * deltaTime; // a little gravity on particles
+            p.life -= deltaTime;
+            if (p.life <= 0) {
+                particles.splice(i, 1);
+            }
+        }
     }
 
     function updateObstacles(deltaTime) {
@@ -363,6 +436,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 allNewObs.push(...newPair);
 
+                // 10% chance to spawn an item box
+                if (Math.random() < 0.1) {
+                    const boxSize = 40;
+                    const itemBox = {
+                        id: Date.now() + Math.random(),
+                        x: currentX + oWidth / 2 - boxSize / 2,
+                        y: topH + verticalGap / 2 - boxSize / 2,
+                        width: boxSize,
+                        height: boxSize,
+                        initialY: topH + verticalGap / 2 - boxSize / 2,
+                        angle: Math.random() * Math.PI * 2
+                    };
+                    itemBoxes.push(itemBox);
+                    // Also send the item box to the other player
+                    if (gameConn && gameConn.open) {
+                        gameConn.send({ type: 'ITEM_SPAWNED', payload: itemBox });
+                    }
+                }
+
                 // Store this pipe's properties for the next one.
                 lastPipe = { topH: topH, verticalGap: verticalGap };
                 
@@ -380,6 +472,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updatePlayer(deltaTime) {
+        // Handle size effect duration
+        if (sizeEffect.active && Date.now() - sizeEffect.startTime > sizeEffect.duration) {
+            sizeEffect.active = false;
+        }
+
         localBird.velocityY += gravity * deltaTime;
         localBird.y += localBird.velocityY * deltaTime;
         score = (Date.now() - startTime) / 1000;
@@ -387,6 +484,7 @@ document.addEventListener('DOMContentLoaded', () => {
             gameConn.send({ type: 'BIRD_POS', payload: { y: localBird.y, score: score } });
         }
         checkCollisions();
+        checkItemCollisions();
     }
 
     // --- Input Handling ---
@@ -512,6 +610,9 @@ document.addEventListener('DOMContentLoaded', () => {
         score = 0;  
         timeToNextObstacle = 0;
         lastPipe = null;
+        itemBoxes = [];
+        particles = [];
+        sizeEffect = { active: false, multiplier: 1, duration: 0, startTime: 0 };
         
         localPlayerReady = false;
         remotePlayerReady = false;
@@ -562,10 +663,55 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function checkCollisions() {
-        const birdBox = { x: localBird.x + birdCollisionBox.x, y: localBird.y + birdCollisionBox.y, width: birdCollisionBox.width, height: birdCollisionBox.height };
+        const birdSizeMultiplier = sizeEffect.active ? sizeEffect.multiplier : 1;
+        // The original bird collision box is hardcoded, let's use it and scale it.
+        const baseCollisionBox = { x: 5, y: 8, width: 34, height: 24 }; 
+        const scaledWidth = baseCollisionBox.width * birdSizeMultiplier;
+        const scaledHeight = baseCollisionBox.height * birdSizeMultiplier;
+
+        // Calculate the scaled collision box centered on the bird's visual center.
+        const birdBox = { 
+            x: localBird.x + (localBird.width / 2) - (scaledWidth / 2),
+            y: localBird.y + (localBird.height / 2) - (scaledHeight / 2),
+            width: scaledWidth,
+            height: scaledHeight
+        };
+
         if (birdBox.y + birdBox.height > canvas.height || birdBox.y < 0) endGame();
         for (const obs of obstacles) {
             if (birdBox.x < obs.x + obs.width && birdBox.x + birdBox.width > obs.x && birdBox.y < obs.y + obs.height && birdBox.y + birdBox.height > obs.y) endGame();
+        }
+    }
+
+    function checkItemCollisions() {
+        const birdSizeMultiplier = sizeEffect.active ? sizeEffect.multiplier : 1;
+        const baseCollisionBox = { x: 5, y: 8, width: 34, height: 24 };
+        const scaledWidth = baseCollisionBox.width * birdSizeMultiplier;
+        const scaledHeight = baseCollisionBox.height * birdSizeMultiplier;
+        const birdBox = { 
+            x: localBird.x + (localBird.width / 2) - (scaledWidth / 2),
+            y: localBird.y + (localBird.height / 2) - (scaledHeight / 2),
+            width: scaledWidth,
+            height: scaledHeight
+        };
+
+        for (let i = itemBoxes.length - 1; i >= 0; i--) {
+            const box = itemBoxes[i];
+            if (birdBox.x < box.x + box.width && birdBox.x + birdBox.width > box.x && birdBox.y < box.y + box.height && birdBox.y + birdBox.height > box.y) {
+                // Collision detected
+                sizeEffect.active = true;
+                sizeEffect.multiplier = Math.random() < 0.5 ? 1.5 : 0.5;
+                sizeEffect.duration = 5000; // 5 seconds
+                sizeEffect.startTime = Date.now();
+
+                spawnParticles(box.x + box.width / 2, box.y + box.height / 2, sizeEffect.multiplier > 1 ? '#FFD700' : '#8A2BE2');
+
+                if (gameConn && gameConn.open) {
+                    gameConn.send({ type: 'ITEM_COLLECTED', payload: { id: box.id } });
+                }
+
+                itemBoxes.splice(i, 1); // Remove the box
+            }
         }
     }
     
@@ -672,6 +818,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     break;
                 case 'OBSTACLES': 
                     obstacles.push(...data.payload); 
+                    break;
+                case 'ITEM_SPAWNED':
+                    itemBoxes.push(data.payload);
+                    break;
+                case 'ITEM_COLLECTED':
+                    itemBoxes = itemBoxes.filter(box => box.id !== data.payload.id);
                     break;
                 case 'GAME_OVER': 
                     remotePlayerFinished = true;
