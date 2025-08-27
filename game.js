@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const LOBBY_SERVER_URL = 'wss://game.qwpo.cc:8080';
 
     // --- Game Objects & State ---
-    let localBird, remoteBird, score, startTime;
+    let localBird, remoteBird, score, startTime, remoteScore;
     let obstacles = [];
     let lastPipe = null;
     let background = { x1: 0, x2: canvas.width, speed: 2 };
@@ -251,8 +251,19 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.textAlign = 'center';
         ctx.fillText(quitButton.text, quitButton.x + quitButton.w / 2, quitButton.y + quitButton.h / 2 + 6);
 
+        // My Score
         ctx.font = '33px "Press Start 2P"';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'white';
         ctx.fillText(score.toFixed(1), canvas.width / 2, 65);
+
+        // Opponent's Score
+        if (gameState === GAME_STATES.PLAYING_MULTI && remoteScore) {
+            ctx.font = '20px "Press Start 2P"';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.fillText(remoteScore.toFixed(1), canvas.width / 2, 95);
+        }
     }
 
     function drawLobbyStatus() {
@@ -373,7 +384,7 @@ document.addEventListener('DOMContentLoaded', () => {
         localBird.y += localBird.velocityY * deltaTime;
         score = (Date.now() - startTime) / 1000;
         if (gameConn && gameConn.open) {
-            gameConn.send({ type: 'BIRD_POS', payload: { y: localBird.y } });
+            gameConn.send({ type: 'BIRD_POS', payload: { y: localBird.y, score: score } });
         }
         checkCollisions();
     }
@@ -413,7 +424,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         changeState(GAME_STATES.LOBBY);
                         break;
                     case 'settings':
-                        alert('Settings not implemented yet.');
+                        // alert('Settings not implemented yet.');
                         break;
                 }
                 return;
@@ -488,14 +499,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }, 1000);
         }
+
+        if (newState === GAME_STATES.PLAYING_SINGLE || newState === GAME_STATES.PLAYING_MULTI) {
+            startTime = Date.now();
+        }
     }
 
     function resetGame(mode) {
         // isHost is now set in changeState or on connection
         localBird = { x: 100, y: 250, width: 45, height: 45, velocityY: 0 };
         obstacles = []; 
-        score = 0; 
-        startTime = Date.now(); 
+        score = 0;  
         timeToNextObstacle = 0;
         lastPipe = null;
         
@@ -506,6 +520,7 @@ document.addEventListener('DOMContentLoaded', () => {
             remoteBird = { x: 100, y: 250, width: 45, height: 45 };
             remotePlayerFinished = false; 
             remoteFinalScore = null;
+            remoteScore = 0;
         } else {
             remoteBird = null;
         }
@@ -653,6 +668,7 @@ document.addEventListener('DOMContentLoaded', () => {
             switch (data.type) {
                 case 'BIRD_POS': 
                     if(remoteBird) remoteBird.y = data.payload.y; 
+                    if(data.payload.score) remoteScore = data.payload.score;
                     break;
                 case 'OBSTACLES': 
                     obstacles.push(...data.payload); 
