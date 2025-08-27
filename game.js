@@ -306,7 +306,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Determine horizontal distance for this new pipe. This is the key for the new logic.
                 const horizontalSpacing = 250 + Math.random() * 250; // Range from 250px to 500px
 
-                const verticalGap = 180; // A fixed, comfortable gap size
+                const verticalGap = 190; // A fixed, comfortable gap size (Increased by 10px)
                 let topH;
 
                 if (lastPipe) {
@@ -335,7 +335,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Clamp topH to ensure it's not impossible
                 topH = Math.max(60, Math.min(topH, canvas.height - verticalGap - 60));
 
-                const oWidth = 80;
+                const oWidth = 80 + Math.random() * 80; // Width is now random, from 80 to 160
                 const newPair = [
                     { x: currentX, y: 0, width: oWidth, height: topH },
                     { x: currentX, y: topH + verticalGap, width: oWidth, height: canvas.height - topH - verticalGap }
