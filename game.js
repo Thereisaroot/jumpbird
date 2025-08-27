@@ -1,134 +1,273 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- DOM Elements ---
-    const getEl = id => document.getElementById(id);
-    const canvas = getEl('game-canvas');
+    const canvas = document.getElementById('game-canvas');
     const ctx = canvas.getContext('2d');
-    const scoreEl = getEl('score');
-    const opponentScoreEl = getEl('opponent-score');
-    const finalScoreEl = getEl('final-score');
-    const myFinalScoreEl = getEl('my-final-score');
-    const opponentFinalScoreEl = getEl('opponent-final-score');
-    const gameOverContainer = getEl('game-over-container');
-    const gameOverTitle = getEl('game-over-title');
-    const uiContainer = getEl('ui-container');
-    const myPeerIdEl = getEl('my-peer-id');
-    const peerIdInput = getEl('peer-id-input');
-    const connectButton = getEl('connect-button');
-    const connectionStatusEl = getEl('connection-status');
-    const userListEl = getEl('user-list');
-    const newGameButton = getEl('new-game-button');
-    const nicknameInput = getEl('nickname-input');
-    const saveNicknameButton = getEl('save-nickname-button');
-
-    // --- Game State & Constants ---
-    let localBird, remoteBird, obstacles, background, score;
-    let gameState = 'loading';
-    let peer, gameConn, myPeerId, myNickname, isHost = false, isLobbyHost = false, lobbyPeer, lobbyPeers = [];
-    let localPlayerReady = false, remotePlayerReady = false, remoteFinalScore = null, remotePlayerFinished = false;
-    let lastTime = 0, timeToNextObstacle = 0;
-    const LOBBY_SERVER_URL = 'wss://game.qwpo.cc:8080';
-    const gravity = 0.4, jumpStrength = 8, obstacleSpeed = 3;
-    const birdCollisionBox = { x: 5, y: 8, width: 34, height: 24 };
+    // Lobby UI
+    const lobbyUi = document.getElementById('lobby-ui');
+    const myIdDisplay = document.getElementById('my-id-display');
+    const nicknameInput = document.getElementById('nickname-input');
+    const saveNicknameButton = document.getElementById('save-nickname-button');
+    // Game Over UI
+    const gameOverOverlay = document.getElementById('game-over-overlay');
+    const gameOverTitleElement = document.getElementById('game-over-title');
+    const myFinalScoreTextElement = document.getElementById('my-final-score-text');
+    const opponentFinalScoreTextElement = document.getElementById('opponent-final-score-text');
+    const newGameButton = document.getElementById('new-game-button');
+    const backToMenuButtonGameOver = document.getElementById('back-to-menu-button');
 
     // --- Image Loading ---
-    const imageSources = { bird: 'bird.png', bg: 'bg.png', longPlumbing: 'long_plumbing.png' };
     const images = {};
-    const loadImages = (cb) => {
-        let loaded = 0, num = Object.keys(imageSources).length;
+    const imageSources = { 
+        bird: 'bird.png', 
+        bg: 'bg.png', 
+        longPlumbing: 'long_plumbing.png',
+        title: 'title.png'
+    };
+
+    function loadImages(callback) {
+        let loaded = 0;
+        const numImages = Object.keys(imageSources).length;
         for (const key in imageSources) {
             images[key] = new Image();
             images[key].src = imageSources[key];
-            images[key].onload = () => { if (++loaded === num) cb(); };
+            images[key].onload = () => { if (++loaded >= numImages) callback(); };
         }
+    }
+
+    // --- Game States & Constants ---
+    const GAME_STATES = {
+        INTRO: 'intro',
+        MENU: 'menu',
+        LOBBY: 'lobby',
+        COUNTDOWN: 'countdown',
+        PLAYING_SINGLE: 'playing_single',
+        PLAYING_MULTI: 'playing_multi',
+        GAME_OVER: 'game_over'
     };
+    let gameState = GAME_STATES.INTRO;
+    let lobbyStatus = { status: 'disconnected', message: 'Lobby: Disconnected' };
+    let peer, gameConn, myPeerId, myNickname, isHost = false, lobbyPeers = [];
+    let lobbySocket;
+    const LOBBY_SERVER_URL = 'wss://game.qwpo.cc:8080';
 
-    // --- Core Game Loop ---
+    // --- Game Objects & State ---
+    let localBird, remoteBird, score, startTime;
+    let obstacles = [];
+    let lastPipe = null;
+    let background = { x1: 0, x2: canvas.width, speed: 2 };
+    let localPlayerReady = false, remotePlayerReady = false, remoteFinalScore = null, remotePlayerFinished = false;
+    let lastTime = 0, timeToNextObstacle = 0;
+    let countdownTimer = 4;
+
+    const gravity = 0.4, jumpStrength = 8, obstacleSpeed = 3;
+    const birdCollisionBox = { x: 5, y: 8, width: 34, height: 24 };
+
+    // --- UI Definitions ---
+    const menuButtons = {
+        single: { x: 140, y: 250, w: 200, h: 50, text: 'Single Play' },
+        multi: { x: 140, y: 320, w: 200, h: 50, text: 'Multi Play' },
+        settings: { x: 140, y: 390, w: 200, h: 50, text: 'Settings' }
+    };
+    let lobbyButtons = [];
+    const quitButton = { x: canvas.width - 110, y: 10, w: 100, h: 30, text: 'Quit' };
+
+    // --- Main Game Loop ---
+    let lastLoopTime = 0;
     function gameLoop(currentTime) {
-        if (!lastTime) lastTime = currentTime;
-        const deltaTime = (currentTime - lastTime) / (1000 / 60);
-        lastTime = currentTime;
+        if (!lastLoopTime) lastLoopTime = currentTime;
+        const deltaTime = (currentTime - lastLoopTime) / (1000 / 60);
+        lastLoopTime = currentTime;
 
-        if (['single_player', 'multiplayer_playing'].includes(gameState)) {
-            update(deltaTime);
-        }
-        
+        update(deltaTime);
         draw();
         requestAnimationFrame(gameLoop);
     }
 
-    // --- Update & Draw ---
+    // --- Central Update & Draw ---
     function update(deltaTime) {
-        // Background Scrolling
-        const overlap = 3;
-        background.x1 -= background.speed * deltaTime;
-        background.x2 -= background.speed * deltaTime;
-        if (background.x1 <= -canvas.width) background.x1 = background.x2 + canvas.width - overlap;
-        if (background.x2 <= -canvas.width) background.x2 = background.x1 + canvas.width - overlap;
+        updateBackground(deltaTime);
 
-        // Player state update
-        localBird.velocityY += gravity * deltaTime;
-        localBird.y += localBird.velocityY * deltaTime;
-
-        // Obstacle Generation (Host only)
-        if (isHost) {
-            timeToNextObstacle -= deltaTime;
-            if (timeToNextObstacle <= 0) {
-                const allNewObs = [];
-                let currentX = canvas.width;
-
-                const isCluster = Math.random() < 0.25;
-                const pipesToGenerate = isCluster ? (Math.random() < 0.5 ? 2 : 3) : 1;
-                
-                const gap = canvas.height * 0.3; // Max 30% of canvas height
-                let topH;
-
-                if (pipesToGenerate > 1) { // Cluster case (narrow horizontal gap)
-                    // Restrict the vertical position to be less extreme
-                    const verticalMargin = canvas.height * 0.2; // 20% margin from top and bottom
-                    topH = Math.random() * (canvas.height - gap - (2 * verticalMargin)) + verticalMargin;
-                } else { // Single pipe case
-                    // Original, more varied vertical position
-                    topH = Math.random() * (canvas.height - gap - 150) + 75;
-                }
-
-                for (let i = 0; i < pipesToGenerate; i++) {
-                    const oWidth = 80 + Math.random() * 50;
-                    
-                    const newPair = [
-                        { x: currentX, y: 0, width: oWidth, height: topH },
-                        { x: currentX, y: topH + gap, width: oWidth, height: canvas.height - topH - gap }
-                    ];
-                    
-                    allNewObs.push(...newPair);
-                    currentX += oWidth + 180;
-                }
-
-                obstacles.push(...allNewObs);
-                if (gameConn && gameConn.open) {
-                    gameConn.send({ type: 'OBSTACLES', payload: allNewObs });
-                }
-                
-                timeToNextObstacle = 120;
-            }
+        // Player is only updated when they are actively playing.
+        if (['playing_single', 'playing_multi'].includes(gameState)) {
+            updatePlayer(deltaTime);
         }
 
-        // Obstacle Movement & Filtering
-        obstacles.forEach(obs => obs.x -= obstacleSpeed * deltaTime);
-        obstacles = obstacles.filter(obs => obs.x + obs.width > 0);
-
-        // Score and network update
-        score = parseFloat(((Date.now() - startTime) / 1000).toFixed(2));
-        if (gameConn && gameConn.open) {
-            gameConn.send({ type: 'BIRD_POS', payload: { y: localBird.y } });
+        // Obstacles should only be updated when the game is actually in a playing state
+        // for single player, or a state where obstacles matter in multiplayer.
+        if (gameState === 'playing_single') {
+            updateObstacles(deltaTime);
+        } else if (gameConn && (gameState === 'playing_multi' || gameState === 'game_over')) {
+            updateObstacles(deltaTime);
         }
-        checkCollisions();
     }
 
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawBackground();
+
+        switch (gameState) {
+            case GAME_STATES.INTRO:
+                drawIntro();
+                break;
+            case GAME_STATES.MENU:
+                drawMenu();
+                break;
+            case GAME_STATES.LOBBY:
+                drawLobby();
+                break;
+            case GAME_STATES.COUNTDOWN:
+                drawCountdown();
+                break;
+            case GAME_STATES.PLAYING_SINGLE:
+            case GAME_STATES.PLAYING_MULTI:
+            case GAME_STATES.GAME_OVER: // Keep drawing the game scene behind the popup
+                drawObstacles();
+                if (remoteBird) drawBird(remoteBird, 0.5);
+                if (localBird) drawBird(localBird, 1.0);
+                if (gameState !== GAME_STATES.GAME_OVER) drawPlayingUI();
+                break;
+        }
+        drawLobbyStatus();
+    }
+
+    // --- State-Specific Drawing ---
+    function drawIntro() {
+        if (images.title) {
+            const img = images.title;
+            const canvasWidth = canvas.width;
+            const scale = Math.min(1, (canvasWidth * 0.9) / img.width);
+            const w = img.width * scale;
+            const h = img.height * scale;
+            const x = canvasWidth / 2 - w / 2;
+            const y = 100;
+            ctx.drawImage(img, x, y, w, h);
+        }
+        ctx.fillStyle = 'white';
+        ctx.font = '16px "Press Start 2P"';
+        ctx.textAlign = 'center';
+        ctx.fillText('Click to Start', canvas.width / 2, 450);
+    }
+
+    function drawRoundedRect(ctx, x, y, width, height, radius, color, alpha = 1) {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + width - radius, y);
+        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+        ctx.lineTo(x + width, y + height - radius);
+        ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+        ctx.lineTo(x + radius, y + height);
+        ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+
+    function drawMenu() {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'white';
+        ctx.font = '40px "Press Start 2P"';
+        ctx.textAlign = 'center';
+        ctx.fillText('Main Menu', canvas.width / 2, 150);
+
+        const buttonColor = '#A7D9B7';
+        const buttonAlpha = 0.5;
+        const borderRadius = 15;
+
+        Object.values(menuButtons).forEach(button => {
+            drawRoundedRect(ctx, button.x, button.y, button.w, button.h, borderRadius, buttonColor, buttonAlpha);
+            ctx.fillStyle = 'white';
+            ctx.font = '16px "Press Start 2P"';
+            ctx.fillText(button.text, button.x + button.w / 2, button.y + button.h / 2 + 8);
+        });
+    }
+
+    function drawLobby() {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw title with new font and shadow
+        ctx.save();
+        ctx.font = '30px "Press Start 2P"';
+        ctx.textAlign = 'center';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+        ctx.shadowBlur = 3;
+        ctx.fillStyle = 'white';
+        ctx.fillText('Lobby', canvas.width / 2, 80);
+        ctx.restore();
+
+        lobbyButtons.forEach(button => {
+            drawRoundedRect(ctx, button.x, button.y, button.w, button.h, 10, 'rgba(0,0,0,0.5)');
+            ctx.fillStyle = 'white';
+            ctx.font = '12px "Press Start 2P"';
+            ctx.textAlign = 'left';
+            ctx.fillText(button.peerId, button.x + 15, button.y + button.h / 2 + 7);
+            
+            const connectButton = button.connectButton;
+            drawRoundedRect(ctx, connectButton.x, button.y, connectButton.w, button.h, 8, connectButton.disabled ? '#7f8c8d' : '#2ecc71');
+            ctx.fillStyle = 'white';
+            ctx.font = '12px "Press Start 2P"';
+            ctx.textAlign = 'center';
+            ctx.fillText(connectButton.text, connectButton.x + connectButton.w / 2, button.y + button.h / 2 + 6);
+        });
+    }
+
+    function drawCountdown() {
+        const anim = (Date.now() % 1000) / 1000;
+        const alpha = Math.sin(anim * Math.PI);
+        const scale = 1 + (1 - alpha) * 1.5;
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = 'white';
+        ctx.font = `${80 * scale}px "Press Start 2P"`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const text = countdownTimer > 0 ? countdownTimer : 'Start!';
+        ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+        ctx.restore();
+    }
+
+    function drawPlayingUI() {
+        drawRoundedRect(ctx, quitButton.x, quitButton.y, quitButton.w, quitButton.h, 10, '#e74c3c');
+        ctx.fillStyle = 'white';
+        ctx.font = '12px "Press Start 2P"';
+        ctx.textAlign = 'center';
+        ctx.fillText(quitButton.text, quitButton.x + quitButton.w / 2, quitButton.y + quitButton.h / 2 + 6);
+
+        ctx.font = '33px "Press Start 2P"';
+        ctx.fillText(score.toFixed(1), canvas.width / 2, 65);
+    }
+
+    function drawLobbyStatus() {
+        let color = '#e74c3c';
+        if (lobbyStatus.status === 'connected') color = '#2ecc71';
+        if (lobbyStatus.status === 'connecting') color = '#f1c40f';
+
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(20, 20, 8, 0, 2 * Math.PI);
+        ctx.fill();
+
+        ctx.fillStyle = 'white';
+        ctx.font = '10px "Press Start 2P"';
+        ctx.textAlign = 'left';
+        ctx.fillText(lobbyStatus.message, 35, 25);
+    }
+
+    function drawBackground() {
         ctx.drawImage(images.bg, background.x1, 0, canvas.width, canvas.height);
         ctx.drawImage(images.bg, background.x2, 0, canvas.width, canvas.height);
+    }
 
+    function drawObstacles() {
         obstacles.forEach(obs => {
             if (obs.y === 0) { // Top obstacle
                 ctx.save();
@@ -140,54 +279,256 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.drawImage(images.longPlumbing, obs.x, obs.y, obs.width, obs.height);
             }
         });
-
-        if (remoteBird) {
-            ctx.globalAlpha = 0.5;
-            ctx.drawImage(images.bird, remoteBird.x, remoteBird.y, remoteBird.width, remoteBird.height);
-            ctx.globalAlpha = 1.0;
-        }
-        ctx.drawImage(images.bird, localBird.x, localBird.y, localBird.width, localBird.height);
-        scoreEl.textContent = score;
     }
 
-    // --- Game State & UI ---
-    function resetGame(mode) {
-        localPlayerReady = false; remotePlayerReady = false; remoteFinalScore = null; remotePlayerFinished = false;
-        gameState = mode;
-        if (mode === 'single_player') {
-            isHost = true;
+    function drawBird(bird, alpha) {
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(images.bird, bird.x, bird.y, bird.width, bird.height);
+        ctx.globalAlpha = 1.0;
+    }
+
+    // --- State-Specific Updates ---
+    function updateBackground(deltaTime) {
+        const overlap = 3;
+        background.x1 -= background.speed * deltaTime;
+        background.x2 -= background.speed * deltaTime;
+        if (background.x1 <= -canvas.width) background.x1 = background.x2 + canvas.width - overlap;
+        if (background.x2 <= -canvas.width) background.x2 = background.x1 + canvas.width - overlap;
+    }
+
+    function updateObstacles(deltaTime) {
+        if (isHost) {
+            timeToNextObstacle -= deltaTime;
+            if (timeToNextObstacle <= 0) {
+                const allNewObs = [];
+                let currentX = canvas.width;
+
+                // Determine horizontal distance for this new pipe. This is the key for the new logic.
+                const horizontalSpacing = 250 + Math.random() * 250; // Range from 250px to 500px
+
+                const verticalGap = 180; // A fixed, comfortable gap size
+                let topH;
+
+                if (lastPipe) {
+                    const lastHoleCenter = lastPipe.topH + (lastPipe.verticalGap / 2);
+                    
+                    // Wider horizontal spacing allows for greater vertical change.
+                    // A small spacing (e.g., 250px) allows for a small change.
+                    // A large spacing (e.g., 500px) allows for a large change.
+                    const maxVerticalChangeRatio = 0.6; // How much of the screen height can it change at max spacing
+                    const maxChange = (horizontalSpacing / 500) * (canvas.height * maxVerticalChangeRatio);
+                    const minChange = 40; // Always allow at least a small change
+                    const allowedChange = Math.max(maxChange, minChange);
+
+                    // Calculate the bounds for the new hole's center
+                    const newHoleCenter_min = Math.max(lastHoleCenter - allowedChange, 100);
+                    const newHoleCenter_max = Math.min(lastHoleCenter + allowedChange, canvas.height - 100);
+                    
+                    const newHoleCenter = Math.random() * (newHoleCenter_max - newHoleCenter_min) + newHoleCenter_min;
+                    topH = newHoleCenter - (verticalGap / 2);
+                } else {
+                    // First pipe, generate freely in the middle area.
+                    const verticalMargin = canvas.height * 0.25;
+                    topH = Math.random() * (canvas.height - verticalGap - (2 * verticalMargin)) + verticalMargin;
+                }
+
+                // Clamp topH to ensure it's not impossible
+                topH = Math.max(60, Math.min(topH, canvas.height - verticalGap - 60));
+
+                const oWidth = 80;
+                const newPair = [
+                    { x: currentX, y: 0, width: oWidth, height: topH },
+                    { x: currentX, y: topH + verticalGap, width: oWidth, height: canvas.height - topH - verticalGap }
+                ];
+                
+                allNewObs.push(...newPair);
+
+                // Store this pipe's properties for the next one.
+                lastPipe = { topH: topH, verticalGap: verticalGap };
+                
+                obstacles.push(...allNewObs);
+                if (gameConn && gameConn.open) {
+                    gameConn.send({ type: 'OBSTACLES', payload: allNewObs });
+                }
+
+                // Set timer for the next obstacle based on the horizontal spacing
+                timeToNextObstacle = horizontalSpacing / obstacleSpeed;
+            }
         }
+        obstacles.forEach(obs => obs.x -= obstacleSpeed * deltaTime);
+        obstacles = obstacles.filter(obs => obs.x + obs.width > 0);
+    }
+
+    function updatePlayer(deltaTime) {
+        localBird.velocityY += gravity * deltaTime;
+        localBird.y += localBird.velocityY * deltaTime;
+        score = (Date.now() - startTime) / 1000;
+        if (gameConn && gameConn.open) {
+            gameConn.send({ type: 'BIRD_POS', payload: { y: localBird.y } });
+        }
+        checkCollisions();
+    }
+
+    // --- Input Handling ---
+    function handleClick(event) {
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+
+        switch (gameState) {
+            case GAME_STATES.INTRO:
+                changeState(GAME_STATES.MENU);
+                break;
+            case GAME_STATES.MENU:
+                handleMenuClick(x, y);
+                break;
+            case GAME_STATES.LOBBY:
+                handleLobbyClick(x, y);
+                break;
+            case GAME_STATES.PLAYING_SINGLE:
+            case GAME_STATES.PLAYING_MULTI:
+                handlePlayingClick(x, y);
+                break;
+        }
+    }
+
+    function handleMenuClick(x, y) {
+        for (const key in menuButtons) {
+            const button = menuButtons[key];
+            if (x >= button.x && x <= button.x + button.w && y >= button.y && y <= button.y + button.h) {
+                switch (key) {
+                    case 'single':
+                        changeState(GAME_STATES.COUNTDOWN, { isSinglePlayer: true });
+                        break;
+                    case 'multi':
+                        changeState(GAME_STATES.LOBBY);
+                        break;
+                    case 'settings':
+                        alert('Settings not implemented yet.');
+                        break;
+                }
+                return;
+            }
+        }
+    }
+
+    function handleLobbyClick(x, y) {
+        lobbyButtons.forEach(button => {
+            const cb = button.connectButton;
+            if (!cb.disabled && x >= cb.x && x <= cb.x + cb.w && y >= button.y && y <= button.y + button.h) {
+                if (gameConn) return;
+                isHost = false;
+                setupGameConnection(peer.connect(button.peerId, { reliable: true }));
+                lobbyButtons.forEach(b => b.connectButton.disabled = true);
+            }
+        });
+    }
+
+    function handlePlayingClick(x, y) {
+        if (x >= quitButton.x && x <= quitButton.x + quitButton.w && y >= quitButton.y && y <= quitButton.y + quitButton.h) {
+            endGame();
+        } else {
+            jump();
+        }
+    }
+
+    // --- State Management & Game Logic ---
+    let countdownInterval;
+    function changeState(newState, options = {}) {
+        lobbyUi.style.display = 'none';
+        gameOverOverlay.style.display = 'none';
+
+        gameState = newState;
+        console.log('Game state changed to:', newState);
+
+        if (newState === GAME_STATES.MENU) {
+            if (gameConn) {
+                gameConn.close();
+                gameConn = null;
+            }
+            if (!peer || peer.disconnected) {
+                initializePeerSystem();
+            } else if (!lobbySocket || lobbySocket.readyState !== WebSocket.OPEN) {
+                connectToLobbyServer();
+            }
+        }
+        if (newState === GAME_STATES.LOBBY) {
+            lobbyUi.style.display = 'block';
+            if(myPeerId) myIdDisplay.textContent = myPeerId;
+            nicknameInput.value = '';
+            nicknameInput.placeholder = myNickname;
+        }
+        if (newState === GAME_STATES.COUNTDOWN) {
+            if (options.isSinglePlayer) {
+                isHost = true;
+            }
+            resetGame(options.isSinglePlayer ? 'single_player' : 'multiplayer');
+            countdownTimer = 3;
+            if(countdownInterval) clearInterval(countdownInterval);
+            countdownInterval = setInterval(() => {
+                countdownTimer--;
+                if (countdownTimer < 0) {
+                    clearInterval(countdownInterval);
+                    changeState(gameConn ? GAME_STATES.PLAYING_MULTI : GAME_STATES.PLAYING_SINGLE);
+                }
+            }, 1000);
+        }
+    }
+
+    function resetGame(mode) {
+        // isHost is now set in changeState or on connection
         localBird = { x: 100, y: 250, width: 45, height: 45, velocityY: 0 };
-        remoteBird = (mode === 'multiplayer_playing') ? { x: 100, y: 250, width: 45, height: 45 } : null;
-        uiContainer.classList.toggle('multiplayer-mode', mode === 'multiplayer_playing');
-        background = { x1: 0, x2: canvas.width, speed: 2 };
-        obstacles = []; score = 0; startTime = Date.now(); timeToNextObstacle = 0; lastTime = performance.now();
-        gameOverContainer.classList.remove('visible');
-        uiContainer.style.display = 'block';
+        obstacles = []; 
+        score = 0; 
+        startTime = Date.now(); 
+        timeToNextObstacle = 0;
+        lastPipe = null;
+        
+        localPlayerReady = false;
+        remotePlayerReady = false;
+
+        if (mode === 'multiplayer') {
+            remoteBird = { x: 100, y: 250, width: 45, height: 45 };
+            remotePlayerFinished = false; 
+            remoteFinalScore = null;
+        } else {
+            remoteBird = null;
+        }
     }
 
     function endGame() {
-        if (gameState === 'over') return;
-        gameState = 'over';
-        newGameButton.disabled = false; newGameButton.textContent = 'New Game';
+        if (gameState === GAME_STATES.GAME_OVER) return;
+        gameState = GAME_STATES.GAME_OVER;
+
         if (gameConn && gameConn.open) {
             gameConn.send({ type: 'GAME_OVER', payload: { score: score } });
-            gameOverContainer.classList.add('multiplayer-results-mode');
-            myFinalScoreEl.textContent = `${score}s`;
+        }
+
+        updateGameOverUI();
+        gameOverOverlay.style.display = 'flex';
+    }
+
+    function updateGameOverUI() {
+        myFinalScoreTextElement.textContent = `My Time: ${score.toFixed(2)}s`;
+
+        if (gameConn) { // Multiplayer Game Over
+            opponentFinalScoreTextElement.style.display = 'block';
             if (remotePlayerFinished) {
                 const winner = score > remoteFinalScore;
-                gameOverTitle.textContent = winner ? "You Win!" : "You Lose!";
-                opponentFinalScoreEl.textContent = `${remoteFinalScore}s`;
+                gameOverTitleElement.textContent = winner ? "You Win!" : "You Lose!";
+                opponentFinalScoreTextElement.textContent = `Opponent: ${remoteFinalScore.toFixed(2)}s`;
             } else {
-                gameOverTitle.textContent = "Finished!";
-                opponentFinalScoreEl.textContent = "Opponent is playing...";
+                gameOverTitleElement.textContent = "Finished!";
+                opponentFinalScoreTextElement.textContent = "Opponent is still playing...";
             }
-        } else {
-            gameOverContainer.classList.remove('multiplayer-results-mode');
-            finalScoreEl.textContent = score;
-            gameOverTitle.textContent = "Game Over";
+        } else { // Single Player Game Over
+            gameOverTitleElement.textContent = "Game Over";
+            myFinalScoreTextElement.textContent = `Time: ${score.toFixed(2)}s`;
+            opponentFinalScoreTextElement.style.display = 'none';
         }
-        gameOverContainer.classList.add('visible');
+        
+        newGameButton.disabled = false;
+        newGameButton.textContent = 'New Game';
     }
 
     function checkCollisions() {
@@ -198,190 +539,188 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    function jump() { if (['single_player', 'multiplayer_playing'].includes(gameState)) localBird.velocityY = -jumpStrength; }
+    function jump() {
+        if (['playing_single', 'playing_multi'].includes(gameState)) {
+            localBird.velocityY = -jumpStrength;
+        }
+    }
 
-    // --- P2P Networking ---
+    // --- Networking ---
+    const MANUAL_CLOSE_CODE = 4000;
+
+    function updateNicknameAndReconnect() {
+        const newNick = nicknameInput.value.trim();
+        if (!newNick || newNick === myNickname) {
+            nicknameInput.value = '';
+            return;
+        }
+
+        myNickname = newNick;
+        localStorage.setItem('stupid-bird-nickname', myNickname);
+        
+        if (lobbySocket) lobbySocket.close(MANUAL_CLOSE_CODE, 'Changing nickname');
+        if (peer) peer.destroy();
+
+        initializePeerSystem();
+    }
+
     function initializePeerSystem() {
         myNickname = localStorage.getItem('stupid-bird-nickname') || 'Player';
-        nicknameInput.value = myNickname;
-        
         const randomPart = Math.random().toString(36).substr(2, 6);
         myPeerId = `${myNickname.replace(/\s+/g, '_')}-${randomPart}`;
         
-        myPeerIdEl.textContent = myPeerId;
-
-        const peerJsConfig = {
-            config: {
-                'iceServers': [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'turn:game.qwpo.cc:3478', username: 'testuser', credential: 'testpass' }
-                ]
-            }
-        };
+        if (myIdDisplay) myIdDisplay.textContent = myPeerId;
+        
+        const peerJsConfig = { config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'turn:game.qwpo.cc:3478', username: 'testuser', credential: 'testpass' }] } };
 
         peer = new Peer(myPeerId, peerJsConfig);
         peer.on('open', () => {
             connectToLobbyServer();
         });
         peer.on('connection', (newConn) => {
+            if (gameConn) { 
+                newConn.on('open', () => newConn.close());
+                return;
+            }
             isHost = true;
             setupGameConnection(newConn);
         });
-        peer.on('error', err => { console.error("PeerJS Error:", err); });
+        peer.on('error', err => { console.error("PeerJS Error:", err); lobbyStatus = { status: 'error', message: 'P2P Error' }; });
     }
 
     function connectToLobbyServer() {
-        const socket = new WebSocket(LOBBY_SERVER_URL);
+        lobbyStatus = { status: 'connecting', message: 'Lobby: Connecting...' };
+        if (lobbySocket && lobbySocket.readyState < 2) lobbySocket.close();
+        lobbySocket = new WebSocket(LOBBY_SERVER_URL);
 
-        socket.onopen = () => {
-            connectionStatusEl.textContent = "Lobby: Connected";
-            socket.send(JSON.stringify({ type: 'ANNOUNCE', id: myPeerId }));
+        lobbySocket.onopen = () => {
+            lobbyStatus = { status: 'connected', message: 'Lobby: Connected' };
+            lobbySocket.send(JSON.stringify({ type: 'ANNOUNCE', id: myPeerId }));
         };
 
-        socket.onmessage = (event) => {
+        lobbySocket.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
                 if (data.type === 'PEER_LIST') {
                     lobbyPeers = data.list;
-                    updateUserList(lobbyPeers);
+                    updateLobbyUI();
                 }
-            } catch (e) {
-                console.error('Error parsing message from server:', e);
+            } catch (e) { console.error('Error parsing message:', e); }
+        };
+
+        lobbySocket.onclose = (event) => {
+            // Do not auto-reconnect if the close was intentional
+            if (event.code === MANUAL_CLOSE_CODE) {
+                lobbyStatus = { status: 'disconnected', message: 'Lobby: Disconnected' };
+                return;
             }
+            if (gameState === GAME_STATES.MENU || gameState === GAME_STATES.LOBBY) {
+                 setTimeout(connectToLobbyServer, 3000);
+            }
+            lobbyStatus = { status: 'disconnected', message: 'Lobby: Disconnected' };
         };
 
-        socket.onclose = () => {
-            connectionStatusEl.textContent = "Lobby: Disconnected";
-            setTimeout(connectToLobbyServer, 3000);
-        };
-
-        socket.onerror = (err) => {
-            console.error('Lobby socket error:', err);
-            connectionStatusEl.textContent = "Lobby: Error";
+        lobbySocket.onerror = (err) => {
+            lobbyStatus = { status: 'error', message: 'Lobby: Error' };
         };
     }
 
-    saveNicknameButton.addEventListener('click', () => {
-        const newNickname = nicknameInput.value.trim();
-        if (newNickname) {
-            localStorage.setItem('stupid-bird-nickname', newNickname);
-            alert('Nickname saved! Please refresh the page for the change to take full effect.');
-        } else {
-            alert('Nickname cannot be empty.');
-        }
-    });
-
     function setupGameConnection(newConn) {
-        if (gameConn) {
-            gameConn.close();
-        }
+        if (gameConn) gameConn.close();
         gameConn = newConn;
         
         gameConn.once('open', () => {
-            connectionStatusEl.textContent = `Connected to ${gameConn.peer}!`;
-            updateUserList(lobbyPeers);
+            if (lobbySocket) lobbySocket.close(MANUAL_CLOSE_CODE, 'Starting game');
+            changeState(GAME_STATES.COUNTDOWN);
         });
-
-        gameOverTitle.textContent = "Ready to Play?";
-        gameOverContainer.classList.add('multiplayer-results-mode');
-        myFinalScoreEl.textContent = "-"; opponentFinalScoreEl.textContent = "-";
-        gameOverContainer.classList.add('visible');
-        uiContainer.style.display = 'none';
 
         gameConn.on('data', data => {
             switch (data.type) {
-                case 'BIRD_POS': if(remoteBird) remoteBird.y = data.payload.y; break;
-                case 'OBSTACLES': obstacles.push(...data.payload); break;
+                case 'BIRD_POS': 
+                    if(remoteBird) remoteBird.y = data.payload.y; 
+                    break;
+                case 'OBSTACLES': 
+                    obstacles.push(...data.payload); 
+                    break;
                 case 'GAME_OVER': 
                     remotePlayerFinished = true;
                     remoteFinalScore = data.payload.score;
-                    remoteBird = null;
-                    opponentScoreEl.textContent = `Finished: ${remoteFinalScore}`;
-                    if (gameState === 'over') {
-                        const localScore = parseFloat(myFinalScoreEl.textContent);
-                        const winner = localScore > remoteFinalScore;
-                        gameOverTitle.textContent = winner ? "You Win!" : "You Lose!";
-                        opponentFinalScoreEl.textContent = `${remoteFinalScore}s`;
+                    if (remoteBird) remoteBird = null;
+                    if (gameState === GAME_STATES.GAME_OVER) {
+                        updateGameOverUI();
                     }
                     break;
-                case 'READY': remotePlayerReady = true; connectionStatusEl.textContent = `Opponent is ready!`; checkIfBothReady(); break;
+                case 'READY_FOR_NEW_GAME':
+                    remotePlayerReady = true;
+                    if (newGameButton.disabled) { // We are waiting
+                        newGameButton.textContent = "Opponent is Ready!";
+                    }
+                    if (localPlayerReady) {
+                        changeState(GAME_STATES.COUNTDOWN);
+                    }
+                    break;
             }
         });
+
         gameConn.on('close', () => { 
-            alert('Opponent disconnected.'); 
+            if (gameState === GAME_STATES.GAME_OVER) {
+                opponentFinalScoreTextElement.textContent = "Opponent has disconnected.";
+                newGameButton.disabled = true; // Can't start a new game
+            } else if (gameState !== GAME_STATES.MENU) { // Avoid alert if we already went to menu
+                alert('Opponent disconnected.'); 
+                changeState(GAME_STATES.MENU);
+            }
             gameConn = null; 
-            resetGame('single_player'); 
-            updateUserList(lobbyPeers);
         });
     }
 
-    function playerReady() {
-        if (!gameConn) return;
-        if (gameConn.open) {
-            localPlayerReady = true;
-            gameConn.send({ type: 'READY' });
-            newGameButton.disabled = true; newGameButton.textContent = 'Waiting...';
-            checkIfBothReady();
-        } else {
-            gameConn.once('open', playerReady);
-        }
-    }
-
-    function checkIfBothReady() { if (localPlayerReady && remotePlayerReady) resetGame('multiplayer_playing'); }
-
-    function updateUserList(peerIds) {
-        userListEl.innerHTML = '';
-        peerIds.forEach(id => {
-            if (id === myPeerId || id.includes('HOST-HOST')) {
-                return; // Skip myself and the easter egg
-            }
-
-            const li = document.createElement('li');
-            li.textContent = id;
-            const button = document.createElement('button');
-            li.appendChild(button);
-            userListEl.appendChild(li);
+    function updateLobbyUI() {
+        lobbyButtons = [];
+        let yPos = 250;
+        lobbyPeers.forEach(id => {
+            if (id === myPeerId) return;
 
             const isConnectedToThisPeer = gameConn && gameConn.open && gameConn.peer === id;
-
-            if (isConnectedToThisPeer) {
-                button.textContent = 'Connected';
-                button.disabled = true;
-            } else {
-                button.textContent = 'Connect';
-                button.disabled = !!gameConn; // Disable if already in a game with someone else
-                button.onclick = () => {
-                    isHost = false;
-                    setupGameConnection(peer.connect(id, { reliable: true }));
-                };
-            }
+            const button = {
+                peerId: id,
+                x: 40, y: yPos, w: 400, h: 40,
+                connectButton: {
+                    x: 300, w: 120, 
+                    text: isConnectedToThisPeer ? 'Connected' : 'Connect',
+                    disabled: !!gameConn
+                }
+            };
+            lobbyButtons.push(button);
+            yPos += 50;
         });
+    }
+
+    // --- Event Listeners ---
+    function handleNewGameClick() {
+        if (!gameConn) { // Single player
+            changeState(GAME_STATES.COUNTDOWN, { isSinglePlayer: true });
+        } else { // Multiplayer
+            localPlayerReady = true;
+            newGameButton.disabled = true;
+            newGameButton.textContent = 'Wait...';
+            gameConn.send({ type: 'READY_FOR_NEW_GAME' });
+            if (remotePlayerReady) {
+                changeState(GAME_STATES.COUNTDOWN);
+            }
+        }
     }
 
     // --- Initial Load & Event Listeners ---
+    // Remove the initial explicit hide, as it's now handled by inline styles
+    canvas.addEventListener('click', handleClick);
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleClick(e.touches[0]); }, { passive: false });
+    
+    saveNicknameButton.addEventListener('click', updateNicknameAndReconnect);
+    newGameButton.addEventListener('click', handleNewGameClick);
+    backToMenuButtonGameOver.addEventListener('click', () => changeState(GAME_STATES.MENU));
+
     loadImages(() => {
-        initializePeerSystem();
-        resetGame('single_player');
+        lastLoopTime = performance.now();
         requestAnimationFrame(gameLoop);
     });
-
-    connectButton.addEventListener('click', () => {
-        const remoteId = peerIdInput.value.trim();
-        if (remoteId && remoteId !== myPeerId) {
-            if (gameConn) {
-                alert("You are already connected to a player.");
-                return;
-            }
-            isHost = false;
-            setupGameConnection(peer.connect(remoteId, { reliable: true }));
-        }
-    });
-
-    newGameButton.addEventListener('click', () => {
-        if (gameConn) { playerReady(); } 
-        else { resetGame('single_player'); }
-    });
-
-    window.addEventListener('keydown', e => { if (e.code === 'Space') jump(); });
-    window.addEventListener('click', jump);
 });

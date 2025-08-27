@@ -1,16 +1,4 @@
-@keyframes pop-in-bouncy {
-    0% {
-        transform: translate(-50%, -50%) scale(0);
-        opacity: 0;
-    }
-    60% {
-        transform: translate(-50%, -50%) scale(1.1);
-        opacity: 1;
-    }
-    100% {
-        transform: translate(-50%, -50%) scale(1);
-    }
-}
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
 body {
     font-family: 'Arial', sans-serif;
@@ -25,126 +13,7 @@ body {
 h1 {
     margin-top: 20px;
     margin-bottom: 10px;
-}
-
-/* --- P2P Container Layout --- */
-#p2p-container {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-areas:
-        "my_info other_players"
-        "status manual_connect";
-    gap: 15px;
-    background-color: #fff;
-    padding: 15px;
-    border-radius: 8px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    margin-bottom: 15px;
-    width: 90%;
-    max-width: 700px;
-    align-items: start;
-}
-
-#my-info-section { grid-area: my_info; }
-#user-list-container { grid-area: other_players; }
-#status-section { grid-area: status; }
-#manual-connect-section { grid-area: manual_connect; }
-
-#my-info-section, #user-list-container, #status-section, #manual-connect-section {
-    padding: 10px;
-    border: 1px solid #eee;
-    border-radius: 6px;
-}
-
-#status-section p {
-    font-size: 16px;
-    font-weight: bold;
-    margin: 0;
-    text-align: left;
-}
-
-#manual-connect-section {
-    display: flex;
-    gap: 5px;
-}
-
-.nickname-section {
-    display: flex;
-    align-items: center;
-    margin-top: 5px;
-}
-
-.nickname-section input {
-    flex-grow: 1;
-    margin-right: 5px;
-}
-
-#save-nickname-button {
-    padding: 2px 8px; /* Reduced height & width */
-    font-size: 12px;
-    height: 26px; /* Match input height */
-}
-/* --- End Layout --- */
-
-#p2p-container input {
-    padding: 8px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    margin: 0;
-    width: 100%;
-}
-
-#p2p-container button {
-    padding: 8px 15px;
-    border: none;
-    border-radius: 4px;
-    background-color: #27ae60;
-    color: white;
-    cursor: pointer;
-    width: auto;
-}
-
-#p2p-container button:hover {
-    background-color: #2ecc71;
-}
-
-#p2p-container button:disabled {
-    background-color: #bdc3c7;
-    cursor: not-allowed;
-}
-
-#user-list-container h3 {
-    margin-top: 0;
-    margin-bottom: 5px;
-    text-align: center;
-}
-
-#user-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    max-height: 150px;
-    overflow-y: auto;
-    background: #f9f9f9;
-    border: 1px solid #eee;
-    border-radius: 4px;
-}
-
-#user-list li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 5px 8px;
-    border-bottom: 1px solid #eee;
-}
-
-#user-list li:last-child {
-    border-bottom: none;
-}
-
-#user-list button {
-    padding: 3px 8px;
-    font-size: 12px;
+    font-family: "Press Start 2P", sans-serif;
 }
 
 #game-container {
@@ -160,102 +29,125 @@ h1 {
     display: block;
 }
 
-#ui-container {
+#lobby-ui {
     position: absolute;
-    top: 10px;
-    left: 10px;
-    right: 10px;
-    color: white;
-    font-size: 18px;
-    text-shadow: 2px 2px 4px #000000;
-}
-
-#score-container {
-    font-size: 24px;
-    font-weight: bold;
-}
-
-#opponent-score-container {
-    font-size: 18px;
-    font-weight: normal;
-    opacity: 0.8;
-    display: none;
-}
-
-#ui-container.multiplayer-mode #opponent-score-container {
-    display: block;
-}
-
-#debug-container {
-    position: absolute;
-    top: 80px;
-    left: 0;
-    background-color: rgba(0, 0, 0, 0.5);
-    padding: 10px;
-    border-radius: 5px;
-    display: none;
-}
-
-#game-over-container {
-    position: absolute;
-    top: 50%;
+    top: 120px; /* Position it below the title */
     left: 50%;
+    transform: translateX(-50%);
     width: 80%;
-    background-color: rgba(255, 255, 255, 0.6);
+    max-width: 400px;
+    background-color: rgba(255, 255, 255, 0.1);
+    padding: 15px;
+    border-radius: 10px;
+    text-align: center;
+    color: white;
+    font-family: "Press Start 2P", sans-serif;
+    font-size: 12px;
+}
+
+#my-id-container p {
+    margin: 0 0 10px 0;
+    word-wrap: break-word;
+}
+
+#nickname-input {
+    padding: 8px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    width: 50%;
+    margin-right: 10px;
+    font-family: "Press Start 2P", sans-serif;
+    font-size: 12px;
+}
+
+#save-nickname-button {
+    padding: 8px 12px;
+    border-radius: 5px;
+    border: none;
+    background-color: #2980b9;
+    color: white;
+    cursor: pointer;
+    font-family: "Press Start 2P", sans-serif;
+    font-size: 12px;
+}
+
+/* Game Over Popup Styles */
+#game-over-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#game-over-card {
+    background: rgba(255, 255, 255,  0.7);
     padding: 20px;
     border-radius: 15px;
     text-align: center;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-    transform: translate(-50%, -50%) scale(0);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.3s ease-out;
+    color: #333;
+    animation: pop-in 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+    width: 80%;
+    max-width: 350px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    font-family: "Press Start 2P", sans-serif;
 }
 
-#game-over-container.visible {
-    opacity: 1;
-    pointer-events: auto;
-    animation: pop-in-bouncy 0.6s cubic-bezier(0.68, -0.55, 0.27, 1.55) forwards;
+@keyframes pop-in {
+    0% {
+        transform: scale(0.5);
+        opacity: 0;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
 
-/* Result display logic */
-#multiplayer-results {
-    display: none;
-}
-#game-over-container.multiplayer-results-mode #multiplayer-results {
-    display: block;
-}
-#game-over-container.multiplayer-results-mode #single-player-results {
-    display: none;
+#game-over-card h2 {
+    margin: 0 0 15px;
+    font-size: 24px;
 }
 
+#game-over-card p {
+    margin: 5px 0 20px;
+    font-size: 14px;
+    line-height: 1.5;
+}
 
-#new-game-button {
-    position: relative;
-    padding: 12px 25px;
-    font-size: 20px;
-    font-weight: bold;
-    cursor: pointer;
-    margin-top: 15px;
+#game-over-buttons {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px; /* 5px margin between buttons */
+}
+
+#game-over-buttons button {
+    font-size: 14px;
+    padding: 12px 20px;
+    border-radius: 8px;
     border: none;
-    border-radius: 10px;
     color: white;
-    background-color: #2980b9;
-    box-shadow: 0 5px #1f648d;
+    cursor: pointer;
+    margin: 0; /* Remove horizontal margin */
+    width: 80%; /* Make buttons same width */
+    background-color: #2980b9; /* Blue color */
+    border-bottom: 4px solid #2c3e50; /* Darker blue for 3D effect */
     transition: all 0.1s ease-in-out;
+    font-family: "Press Start 2P", sans-serif;
 }
 
-#new-game-button:hover {
-    background-color: #3498db;
+#game-over-buttons button:active {
+    transform: translateY(2px);
+    border-bottom-width: 2px;
 }
 
-#new-game-button:active {
-    top: 4px;
-    box-shadow: 0 1px #1f648d;
-}
-
-#new-game-button:disabled {
-    background-color: #bdc3c7;
-    box-shadow: 0 5px #95a5a6;
+#game-over-buttons button:disabled {
+    background-color: #95a5a6;
+    border-bottom-color: #7f8c8d;
     cursor: not-allowed;
 }

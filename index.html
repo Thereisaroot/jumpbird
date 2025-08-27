@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,53 +8,33 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>Jump Jump Stupid Bird</h1>
-
-    <div id="p2p-container">
-        <div id="my-info-section">
-            <div>Your ID: <strong id="my-peer-id">...</strong></div>
-            <div class="nickname-section">
-                <input type="text" id="nickname-input" placeholder="Enter nickname">
-                <button id="save-nickname-button">Save</button>
-            </div>
-        </div>
-        <div id="user-list-container">
-            <h3>Other Players</h3>
-            <ul id="user-list"></ul>
-        </div>
-        <div id="status-section">
-            <p>Status: <span id="connection-status">Initializing...</span></p>
-        </div>
-        <div id="manual-connect-section">
-            <input type="text" id="peer-id-input" placeholder="Enter opponent's ID">
-            <button id="connect-button">Manual Connect</button>
-        </div>
-    </div>
+    <!-- <h1>Jump Jump Stupid Bird</h1> -->
+     <br>
 
     <div id="game-container">
         <canvas id="game-canvas" width="480" height="640"></canvas>
-        <div id="ui-container">
-            <div id="score-container">Time: <span id="score">0</span>s</div>
-            <div id="opponent-score-container">Opponent: <span id="opponent-score">0</span>s</div>
-            <div id="debug-container">
-                <h3>Debug Options</h3>
-                <button id="toggle-debug">Toggle Hitbox</button>
+        
+        <div id="lobby-ui" style="display: none;">
+            <div id="my-id-container">
+                <p>Your ID: <span id="my-id-display"></span></p>
+                <input type="text" id="nickname-input" placeholder="Enter new nickname">
+                <button id="save-nickname-button">Save</button>
             </div>
         </div>
-        <div id="game-over-container">
-            <h2 id="game-over-title">Game Over</h2>
-            <div id="single-player-results">
-                <p>Your Time: <span id="final-score">0</span>s</p>
-                <h3>Best Records (Top 5)</h3>
-                <ol id="high-scores"></ol>
+
+        <div id="game-over-overlay" style="display: none;">
+            <div id="game-over-card">
+                <h2 id="game-over-title">Game Over</h2>
+                <p id="my-final-score-text"></p>
+                <p id="opponent-final-score-text"></p>
+                <div id="game-over-buttons">
+                    <button id="new-game-button">New Game</button>
+                    <button id="back-to-menu-button">Back to Menu</button>
+                </div>
             </div>
-            <div id="multiplayer-results">
-                <p>My Record: <span id="my-final-score">0</span></p>
-                <p>Opponent: <span id="opponent-final-score">...</span></p>
-            </div>
-            <button id="new-game-button">New Game</button>
         </div>
     </div>
+    
     <script src="game.js"></script>
 </body>
 </html>
