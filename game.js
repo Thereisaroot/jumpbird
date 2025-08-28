@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const menuButtons = {
         single: { x: 140, y: 250, w: 200, h: 50, text: 'Single Play' },
         multi: { x: 140, y: 320, w: 200, h: 50, text: 'Multi Play' },
-        settings: { x: 140, y: 390, w: 200, h: 50, text: 'Settings' }
+        connection: { x: 140, y: 390, w: 200, h: 50, text: 'Go Online' }
     };
     const lobbyBackButton = { x: 20, y: canvas.height - 60, w: 200, h: 40, text: 'Back to Menu' };
     let lobbyButtons = [];
@@ -185,8 +185,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const buttonAlpha = 0.5;
         const borderRadius = 15;
 
+        // Dynamically update connection button text
+        const isOnline = peer && !peer.disconnected;
+        menuButtons.connection.text = isOnline ? 'Go Offline' : 'Go Online';
+        menuButtons.multi.disabled = !isOnline; // Disable multiplay if offline
+
         Object.values(menuButtons).forEach(button => {
-            drawRoundedRect(ctx, button.x, button.y, button.w, button.h, borderRadius, buttonColor, buttonAlpha);
+            const alpha = button.disabled ? 0.2 : buttonAlpha;
+            const color = button.disabled ? '#888' : buttonColor;
+            drawRoundedRect(ctx, button.x, button.y, button.w, button.h, borderRadius, color, alpha);
             ctx.fillStyle = 'white';
             ctx.font = '16px "Press Start 2P"';
             ctx.fillText(button.text, button.x + button.w / 2, button.y + button.h / 2 + 8);
@@ -484,6 +491,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleMenuClick(x, y) {
         for (const key in menuButtons) {
             const button = menuButtons[key];
+            if (button.disabled) continue;
+
             if (x >= button.x && x <= button.x + button.w && y >= button.y && y <= button.y + button.h) {
                 switch (key) {
                     case 'single':
@@ -492,7 +501,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     case 'multi':
                         changeState(GAME_STATES.LOBBY);
                         break;
-                    case 'settings':
+                    case 'connection':
+                        const isOnline = peer && !peer.disconnected;
+                        if (isOnline) {
+                            shutdownNetworking();
+                        } else {
+                            connectToLobbyServer();
+                        }
                         break;
                 }
                 return;
@@ -536,21 +551,17 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Game state changed to:', newState);
 
         if (newState === GAME_STATES.MENU) {
-            if (gameConn) {
-                gameConn.close();
-                gameConn = null;
-            }
-            if (lobbySocket) {
-                lobbySocket.close(MANUAL_CLOSE_CODE);
-            }
-            if(peer) {
-                peer.destroy();
-                peer = null;
+            // When entering menu, automatically try to connect if not already connected.
+            if (!peer || peer.disconnected) {
+                connectToLobbyServer();
             }
         }
         if (newState === GAME_STATES.LOBBY) {
             lobbyUi.style.display = 'block';
-            connectToLobbyServer();
+            // Nickname UI is part of the lobby screen
+            if(myPeerId) myIdDisplay.textContent = myPeerId;
+            nicknameInput.value = '';
+            nicknameInput.placeholder = myNickname;
         }
         if (newState === GAME_STATES.COUNTDOWN) {
             if (options.isSinglePlayer) {
@@ -690,19 +701,29 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Networking ---
     const MANUAL_CLOSE_CODE = 4000;
 
+    function shutdownNetworking() {
+        if (lobbySocket) {
+            lobbySocket.close(MANUAL_CLOSE_CODE, "User disconnected");
+        }
+        if (peer) {
+            peer.destroy();
+        }
+        peer = null;
+        lobbySocket = null;
+        lobbyStatus = { status: 'disconnected', message: 'Lobby: Disconnected' };
+        lobbyPeers = [];
+        console.log('Network systems shut down.');
+    }
+
     function updateNicknameAndReconnect() {
         const newNick = nicknameInput.value.trim();
         if (!newNick || newNick === myNickname) {
             nicknameInput.value = '';
             return;
         }
-
         myNickname = newNick;
         localStorage.setItem('stupid-bird-nickname', myNickname);
-        
-        if (lobbySocket) lobbySocket.close(MANUAL_CLOSE_CODE, 'Changing nickname');
-        if (peer) peer.destroy();
-
+        shutdownNetworking();
         connectToLobbyServer();
     }
 
@@ -749,11 +770,16 @@ document.addEventListener('DOMContentLoaded', () => {
             lobbyStatus = { status: 'error', message: `P2P System Error: ${err.type}` };
             if (gameConn) gameConn.close();
         });
+
+        peer.on('disconnected', () => {
+            lobbyStatus = { status: 'disconnected', message: 'Lobby: Disconnected' };
+        });
     }
 
     function connectToLobbyServer() {
+        if (lobbySocket && lobbySocket.readyState === WebSocket.OPEN) return;
+
         lobbyStatus = { status: 'connecting', message: 'Lobby: Connecting...' };
-        if (lobbySocket && lobbySocket.readyState < 2) lobbySocket.close();
         lobbySocket = new WebSocket(LOBBY_SERVER_URL);
 
         lobbySocket.onopen = () => {
