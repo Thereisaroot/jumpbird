@@ -544,6 +544,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- State Management & Game Logic ---
     let countdownInterval;
     function changeState(newState, options = {}) {
+        const oldState = gameState;
+
+        // --- State Exit Cleanup ---
+        // If we are leaving a state that could have a P2P connection, clean it up.
+        if ([GAME_STATES.PLAYING_MULTI, GAME_STATES.GAME_OVER, GAME_STATES.COUNTDOWN].includes(oldState)) {
+            if (gameConn) {
+                gameConn.close();
+                gameConn = null;
+                console.log('P2P connection closed.');
+            }
+        }
+
+        // --- State Enter Setup ---
         lobbyUi.style.display = 'none';
         gameOverOverlay.style.display = 'none';
 
@@ -552,7 +565,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (newState === GAME_STATES.MENU) {
             // When entering menu, automatically try to connect if not already connected.
-            if (!peer || peer.disconnected) {
+            // The lobby socket was closed when the game started, so it should be closed now.
+            if (!lobbySocket || (lobbySocket.readyState !== WebSocket.OPEN && lobbySocket.readyState !== WebSocket.CONNECTING)) {
                 connectToLobbyServer();
             }
         }
