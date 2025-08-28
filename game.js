@@ -544,19 +544,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- State Management & Game Logic ---
     let countdownInterval;
     function changeState(newState, options = {}) {
-        const oldState = gameState;
-
-        // --- State Exit Cleanup ---
-        // If we are leaving a state that could have a P2P connection, clean it up.
-        if ([GAME_STATES.PLAYING_MULTI, GAME_STATES.GAME_OVER, GAME_STATES.COUNTDOWN].includes(oldState)) {
-            if (gameConn) {
-                gameConn.close();
-                gameConn = null;
-                console.log('P2P connection closed.');
+        // --- Cleanup logic for the OLD state ---
+        // Only clean up P2P connections when explicitly returning to the main menu
+        if (newState === GAME_STATES.MENU) {
+            const oldState = gameState;
+            if ([GAME_STATES.PLAYING_MULTI, GAME_STATES.GAME_OVER, GAME_STATES.COUNTDOWN, GAME_STATES.PLAYING_SINGLE].includes(oldState)) {
+                if (gameConn) {
+                    gameConn.close();
+                    gameConn = null;
+                    console.log('P2P connection closed upon returning to menu.');
+                }
             }
         }
 
-        // --- State Enter Setup ---
+        // --- Setup logic for the NEW state ---
         lobbyUi.style.display = 'none';
         gameOverOverlay.style.display = 'none';
 
@@ -565,14 +566,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (newState === GAME_STATES.MENU) {
             // When entering menu, automatically try to connect if not already connected.
-            // The lobby socket was closed when the game started, so it should be closed now.
             if (!lobbySocket || (lobbySocket.readyState !== WebSocket.OPEN && lobbySocket.readyState !== WebSocket.CONNECTING)) {
                 connectToLobbyServer();
             }
         }
         if (newState === GAME_STATES.LOBBY) {
             lobbyUi.style.display = 'block';
-            // Nickname UI is part of the lobby screen
             if(myPeerId) myIdDisplay.textContent = myPeerId;
             nicknameInput.value = '';
             nicknameInput.placeholder = myNickname;
