@@ -50,6 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let peer, gameConn, myPeerId, myNickname, isHost = false, lobbyPeers = [];
     let lobbySocket;
     const LOBBY_SERVER_URL = 'wss://game.qwpo.cc:8080';
+    const API_SERVER_URL = 'https://game.qwpo.cc:8080';
 
     // --- Game Objects & State ---
     let localBird, remoteBird, score, startTime, remoteScore;
@@ -93,13 +94,10 @@ document.addEventListener('DOMContentLoaded', () => {
         updateItemBoxes(deltaTime);
         updateParticles(deltaTime);
 
-        // Player is only updated when they are actively playing.
         if (['playing_single', 'playing_multi'].includes(gameState)) {
             updatePlayer(deltaTime);
         }
 
-        // Obstacles should only be updated when the game is actually in a playing state
-        // for single player, or a state where obstacles matter in multiplayer.
         if (gameState === 'playing_single') {
             updateObstacles(deltaTime);
         } else if (gameConn && (gameState === 'playing_multi' || gameState === 'game_over')) {
@@ -126,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             case GAME_STATES.PLAYING_SINGLE:
             case GAME_STATES.PLAYING_MULTI:
-            case GAME_STATES.GAME_OVER: // Keep drawing the game scene behind the popup
+            case GAME_STATES.GAME_OVER: 
                 drawObstacles();
                 drawItemBoxes();
                 if (remoteBird) drawBird(remoteBird, 0.5);
@@ -138,7 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
         drawLobbyStatus();
     }
 
-    // --- State-Specific Drawing ---
+    // --- Drawing Functions ---
     function drawIntro() {
         if (images.title) {
             const img = images.title;
@@ -199,7 +197,6 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         
-        // Draw title with new font and shadow
         ctx.save();
         ctx.font = '30px "Press Start 2P"';
         ctx.textAlign = 'center';
@@ -226,7 +223,6 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.fillText(connectButton.text, connectButton.x + connectButton.w / 2, button.y + button.h / 2 + 6);
         });
 
-        // Draw the back button
         const btn = lobbyBackButton;
         drawRoundedRect(ctx, btn.x, btn.y, btn.w, btn.h, 15, '#e74c3c', 0.7);
         ctx.fillStyle = 'white';
@@ -258,13 +254,11 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.textAlign = 'center';
         ctx.fillText(quitButton.text, quitButton.x + quitButton.w / 2, quitButton.y + quitButton.h / 2 + 6);
 
-        // My Score
         ctx.font = '33px "Press Start 2P"';
         ctx.textAlign = 'center';
         ctx.fillStyle = 'white';
         ctx.fillText(score.toFixed(1), canvas.width / 2, 65);
 
-        // Opponent's Score
         if (gameState === GAME_STATES.PLAYING_MULTI && remoteScore) {
             ctx.font = '20px "Press Start 2P"';
             ctx.textAlign = 'center';
@@ -349,7 +343,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const birdCurrentWidth = bird.width * birdSizeMultiplier;
         const birdCurrentHeight = bird.height * birdSizeMultiplier;
 
-        // Draw bird centered on its original position
         const drawX = bird.x + (bird.width - birdCurrentWidth) / 2;
         const drawY = bird.y + (bird.height - birdCurrentHeight) / 2;
 
@@ -357,7 +350,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.globalAlpha = 1.0;
     }
 
-    // --- State-Specific Updates ---
+    // --- Updates ---
     function updateBackground(deltaTime) {
         const overlap = 3;
         background.x1 -= background.speed * deltaTime;
@@ -372,7 +365,6 @@ document.addEventListener('DOMContentLoaded', () => {
             box.angle += 0.05 * deltaTime;
             box.y = box.initialY + Math.sin(box.angle) * 5;
         });
-        // Remove boxes that are off-screen
         itemBoxes = itemBoxes.filter(box => box.x + box.width > 0);
     }
 
@@ -381,7 +373,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const p = particles[i];
             p.x += p.vx * deltaTime;
             p.y += p.vy * deltaTime;
-            p.vy += 0.05 * deltaTime; // a little gravity on particles
+            p.vy += 0.05 * deltaTime;
             p.life -= deltaTime;
             if (p.life <= 0) {
                 particles.splice(i, 1);
@@ -395,48 +387,33 @@ document.addEventListener('DOMContentLoaded', () => {
             if (timeToNextObstacle <= 0) {
                 const allNewObs = [];
                 let currentX = canvas.width;
-
-                // Determine horizontal distance for this new pipe. This is the key for the new logic.
-                const horizontalSpacing = 250 + Math.random() * 250; // Range from 250px to 500px
-
-                const verticalGap = 190; // A fixed, comfortable gap size (Increased by 10px)
+                const horizontalSpacing = 250 + Math.random() * 250;
+                const verticalGap = 190;
                 let topH;
 
                 if (lastPipe) {
                     const lastHoleCenter = lastPipe.topH + (lastPipe.verticalGap / 2);
-                    
-                    // Wider horizontal spacing allows for greater vertical change.
-                    // A small spacing (e.g., 250px) allows for a small change.
-                    // A large spacing (e.g., 500px) allows for a large change.
-                    const maxVerticalChangeRatio = 0.6; // How much of the screen height can it change at max spacing
+                    const maxVerticalChangeRatio = 0.6;
                     const maxChange = (horizontalSpacing / 500) * (canvas.height * maxVerticalChangeRatio);
-                    const minChange = 40; // Always allow at least a small change
+                    const minChange = 40;
                     const allowedChange = Math.max(maxChange, minChange);
-
-                    // Calculate the bounds for the new hole's center
                     const newHoleCenter_min = Math.max(lastHoleCenter - allowedChange, 100);
                     const newHoleCenter_max = Math.min(lastHoleCenter + allowedChange, canvas.height - 100);
-                    
                     const newHoleCenter = Math.random() * (newHoleCenter_max - newHoleCenter_min) + newHoleCenter_min;
                     topH = newHoleCenter - (verticalGap / 2);
                 } else {
-                    // First pipe, generate freely in the middle area.
                     const verticalMargin = canvas.height * 0.25;
                     topH = Math.random() * (canvas.height - verticalGap - (2 * verticalMargin)) + verticalMargin;
                 }
 
-                // Clamp topH to ensure it's not impossible
                 topH = Math.max(60, Math.min(topH, canvas.height - verticalGap - 60));
-
-                const oWidth = 80 + Math.random() * 80; // Width is now random, from 80 to 160
+                const oWidth = 80 + Math.random() * 80;
                 const newPair = [
                     { x: currentX, y: 0, width: oWidth, height: topH },
                     { x: currentX, y: topH + verticalGap, width: oWidth, height: canvas.height - topH - verticalGap }
                 ];
-                
                 allNewObs.push(...newPair);
 
-                // 10% chance to spawn an item box
                 if (Math.random() < 0.1) {
                     const boxSize = 40;
                     const itemBox = {
@@ -449,21 +426,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         angle: Math.random() * Math.PI * 2
                     };
                     itemBoxes.push(itemBox);
-                    // Also send the item box to the other player
                     if (gameConn && gameConn.open) {
                         gameConn.send({ type: 'ITEM_SPAWNED', payload: itemBox });
                     }
                 }
 
-                // Store this pipe's properties for the next one.
                 lastPipe = { topH: topH, verticalGap: verticalGap };
-                
                 obstacles.push(...allNewObs);
                 if (gameConn && gameConn.open) {
                     gameConn.send({ type: 'OBSTACLES', payload: allNewObs });
                 }
-
-                // Set timer for the next obstacle based on the horizontal spacing
                 timeToNextObstacle = horizontalSpacing / obstacleSpeed;
             }
         }
@@ -472,7 +444,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updatePlayer(deltaTime) {
-        // Handle size effect duration
         if (sizeEffect.active && Date.now() - sizeEffect.startTime > sizeEffect.duration) {
             sizeEffect.active = false;
         }
@@ -522,7 +493,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         changeState(GAME_STATES.LOBBY);
                         break;
                     case 'settings':
-                        // alert('Settings not implemented yet.');
                         break;
                 }
                 return;
@@ -570,17 +540,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 gameConn.close();
                 gameConn = null;
             }
-            if (!peer || peer.disconnected) {
-                initializePeerSystem();
-            } else if (!lobbySocket || lobbySocket.readyState !== WebSocket.OPEN) {
-                connectToLobbyServer();
+            if (lobbySocket) {
+                lobbySocket.close(MANUAL_CLOSE_CODE);
+            }
+            if(peer) {
+                peer.destroy();
+                peer = null;
             }
         }
         if (newState === GAME_STATES.LOBBY) {
             lobbyUi.style.display = 'block';
-            if(myPeerId) myIdDisplay.textContent = myPeerId;
-            nicknameInput.value = '';
-            nicknameInput.placeholder = myNickname;
+            connectToLobbyServer();
         }
         if (newState === GAME_STATES.COUNTDOWN) {
             if (options.isSinglePlayer) {
@@ -604,7 +574,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function resetGame(mode) {
-        // isHost is now set in changeState or on connection
         localBird = { x: 100, y: 250, width: 45, height: 45, velocityY: 0 };
         obstacles = []; 
         score = 0;  
@@ -664,12 +633,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function checkCollisions() {
         const birdSizeMultiplier = sizeEffect.active ? sizeEffect.multiplier : 1;
-        // The original bird collision box is hardcoded, let's use it and scale it.
         const baseCollisionBox = { x: 5, y: 8, width: 34, height: 24 }; 
         const scaledWidth = baseCollisionBox.width * birdSizeMultiplier;
         const scaledHeight = baseCollisionBox.height * birdSizeMultiplier;
 
-        // Calculate the scaled collision box centered on the bird's visual center.
         const birdBox = { 
             x: localBird.x + (localBird.width / 2) - (scaledWidth / 2),
             y: localBird.y + (localBird.height / 2) - (scaledHeight / 2),
@@ -698,7 +665,6 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let i = itemBoxes.length - 1; i >= 0; i--) {
             const box = itemBoxes[i];
             if (birdBox.x < box.x + box.width && birdBox.x + birdBox.width > box.x && birdBox.y < box.y + box.height && birdBox.y + birdBox.height > box.y) {
-                // Collision detected
                 sizeEffect.active = true;
                 sizeEffect.multiplier = Math.random() < 0.5 ? 1.5 : 0.5;
                 sizeEffect.duration = 5000; // 5 seconds
@@ -737,22 +703,38 @@ document.addEventListener('DOMContentLoaded', () => {
         if (lobbySocket) lobbySocket.close(MANUAL_CLOSE_CODE, 'Changing nickname');
         if (peer) peer.destroy();
 
-        initializePeerSystem();
+        connectToLobbyServer();
     }
 
-    function initializePeerSystem() {
+    async function initializePeerSystem(token) {
+        if (peer) peer.destroy();
+
+        let turnConfig;
+        try {
+            const response = await fetch(`${API_SERVER_URL}/api/turn-credentials?token=${token}`);
+            if (!response.ok) {
+                throw new Error(`API request failed with status ${response.status}`);
+            }
+            turnConfig = await response.json();
+        } catch (error) {
+            console.error('Could not fetch TURN credentials:', error);
+            lobbyStatus = { status: 'error', message: 'Lobby: Auth Failed' };
+            return;
+        }
+
         myNickname = localStorage.getItem('stupid-bird-nickname') || 'Player';
         const randomPart = Math.random().toString(36).substr(2, 6);
         myPeerId = `${myNickname.replace(/\s+/g, '_')}-${randomPart}`;
         
         if (myIdDisplay) myIdDisplay.textContent = myPeerId;
         
-        const peerJsConfig = { config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'turn:game.qwpo.cc:3478', username: 'testuser', credential: 'testpass' }] } };
+        peer = new Peer(myPeerId, { config: turnConfig });
 
-        peer = new Peer(myPeerId, peerJsConfig);
         peer.on('open', () => {
-            connectToLobbyServer();
+            lobbyStatus = { status: 'connected', message: 'Lobby: Connected' };
+            lobbySocket.send(JSON.stringify({ type: 'ANNOUNCE', id: myPeerId }));
         });
+
         peer.on('connection', (newConn) => {
             if (gameConn) { 
                 newConn.on('open', () => newConn.close());
@@ -761,7 +743,12 @@ document.addEventListener('DOMContentLoaded', () => {
             isHost = true;
             setupGameConnection(newConn);
         });
-        peer.on('error', err => { console.error("PeerJS Error:", err); lobbyStatus = { status: 'error', message: 'P2P Error' }; });
+
+        peer.on('error', err => {
+            console.error("PeerJS Global Error:", err);
+            lobbyStatus = { status: 'error', message: `P2P System Error: ${err.type}` };
+            if (gameConn) gameConn.close();
+        });
     }
 
     function connectToLobbyServer() {
@@ -770,13 +757,15 @@ document.addEventListener('DOMContentLoaded', () => {
         lobbySocket = new WebSocket(LOBBY_SERVER_URL);
 
         lobbySocket.onopen = () => {
-            lobbyStatus = { status: 'connected', message: 'Lobby: Connected' };
-            lobbySocket.send(JSON.stringify({ type: 'ANNOUNCE', id: myPeerId }));
+            // Wait for server to send token
         };
 
         lobbySocket.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
+                if (data.type === 'CREDENTIAL_TOKEN') {
+                    initializePeerSystem(data.payload.token);
+                }
                 if (data.type === 'PEER_LIST') {
                     lobbyPeers = data.list;
                     updateLobbyUI();
@@ -785,15 +774,9 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         lobbySocket.onclose = (event) => {
-            // Do not auto-reconnect if the close was intentional
-            if (event.code === MANUAL_CLOSE_CODE) {
+            if (event.code !== MANUAL_CLOSE_CODE) {
                 lobbyStatus = { status: 'disconnected', message: 'Lobby: Disconnected' };
-                return;
             }
-            if (gameState === GAME_STATES.MENU || gameState === GAME_STATES.LOBBY) {
-                 setTimeout(connectToLobbyServer, 3000);
-            }
-            lobbyStatus = { status: 'disconnected', message: 'Lobby: Disconnected' };
         };
 
         lobbySocket.onerror = (err) => {
@@ -804,6 +787,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupGameConnection(newConn) {
         if (gameConn) gameConn.close();
         gameConn = newConn;
+
+        gameConn.on('error', (err) => {
+            console.error('P2P Connection Error:', err);
+            lobbyStatus = { status: 'error', message: `Connection Failed: ${err.type}` };
+        });
         
         gameConn.once('open', () => {
             if (lobbySocket) lobbySocket.close(MANUAL_CLOSE_CODE, 'Starting game');
@@ -835,7 +823,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     break;
                 case 'READY_FOR_NEW_GAME':
                     remotePlayerReady = true;
-                    if (newGameButton.disabled) { // We are waiting
+                    if (newGameButton.disabled) {
                         newGameButton.textContent = "Opponent is Ready!";
                     }
                     if (localPlayerReady) {
@@ -848,12 +836,15 @@ document.addEventListener('DOMContentLoaded', () => {
         gameConn.on('close', () => { 
             if (gameState === GAME_STATES.GAME_OVER) {
                 opponentFinalScoreTextElement.textContent = "Opponent has disconnected.";
-                newGameButton.disabled = true; // Can't start a new game
-            } else if (gameState !== GAME_STATES.MENU) { // Avoid alert if we already went to menu
+                newGameButton.disabled = true;
+            } 
+            else if (gameState !== GAME_STATES.MENU) { 
                 alert('Opponent disconnected.'); 
                 changeState(GAME_STATES.MENU);
             }
+            
             gameConn = null; 
+            updateLobbyUI();
         });
     }
 
@@ -894,7 +885,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Initial Load & Event Listeners ---
-    // Remove the initial explicit hide, as it's now handled by inline styles
     canvas.addEventListener('click', handleClick);
     canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleClick(e.touches[0]); }, { passive: false });
     
