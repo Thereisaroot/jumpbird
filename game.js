@@ -800,9 +800,9 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         lobbySocket.onclose = (event) => {
-            if (event.code !== MANUAL_CLOSE_CODE) {
-                lobbyStatus = { status: 'disconnected', message: 'Lobby: Disconnected' };
-            }
+            // Any close, manual or not, means we are disconnected from the lobby.
+            lobbyStatus = { status: 'disconnected', message: 'Lobby: Disconnected' };
+            console.log(`Lobby WebSocket closed: code ${event.code}`);
         };
 
         lobbySocket.onerror = (err) => {
